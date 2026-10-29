@@ -5566,8 +5566,8 @@ body.is-resizing-sidebars * {
   position: absolute;
   left: 50%;
   z-index: 2;
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   border: 2px solid var(--md-primary);
   border-radius: 50%;
@@ -5581,12 +5581,26 @@ body.is-resizing-sidebars * {
 }
 
 .script-port.is-head {
-  top: -8px;
+  top: -9px;
 }
 
 .script-port.is-tail {
-  bottom: -8px;
+  bottom: -9px;
   background: var(--md-primary);
+}
+
+.script-board-canvas.is-connecting .script-port.is-head {
+  box-shadow: 0 0 0 4px var(--md-primary-container);
+  animation: script-port-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes script-port-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 3px var(--md-primary-container);
+  }
+  50% {
+    box-shadow: 0 0 0 7px var(--md-primary-container);
+  }
 }
 
 .script-board-empty {

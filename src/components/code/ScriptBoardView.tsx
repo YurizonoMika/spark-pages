@@ -2,6 +2,7 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type WheelEvent as ReactWheelEvent,
 } from "react";
 import {
   Link2,
@@ -70,6 +71,12 @@ export function ScriptBoardView({ page }: { page: Page }) {
 
   const board = page.scriptBoard ?? { blocks: [], connections: [] };
   const canvasRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canvasExtent, setCanvasExtent] = useState({
+    width: 2400,
+    height: 1600,
+  });
+  const [origin, setOrigin] = useState({ x: 0, y: 0 });
   const [pendingFrom, setPendingFrom] = useState<string | null>(null);
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(
     null,
@@ -79,15 +86,22 @@ export function ScriptBoardView({ page }: { page: Page }) {
   const [generating, setGenerating] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
+  const visualBlocks = board.blocks.map((block) => ({
+    ...block,
+    x: block.x - origin.x,
+    y: block.y - origin.y,
+  }));
   const canvasWidth = Math.max(
-    1600,
-    ...board.blocks.map((block) => block.x + block.width + 280),
+    canvasExtent.width,
+    ...visualBlocks.map((block) => block.x + block.width + 280),
   );
   const canvasHeight = Math.max(
-    1000,
-    ...board.blocks.map((block) => block.y + block.height + 280),
+    canvasExtent.height,
+    ...visualBlocks.map((block) => block.y + block.height + 280),
   );
-  const blockById = new Map(board.blocks.map((block) => [block.id, block]));
+  const blockById = new Map(
+    visualBlocks.map((block) => [block.id, block]),
+  );
   const pendingBlock = pendingFrom ? blockById.get(pendingFrom) : undefined;
 
   const startDrag = (
@@ -133,7 +147,7 @@ export function ScriptBoardView({ page }: { page: Page }) {
     }
     const connected = connectScriptBlocks(pendingFrom, id);
     if (!connected) {
-      toast("无法连接：已经存在相同连线", "info");
+      return;
     }
     setPendingFrom(null);
     setPointer(null);
@@ -142,6 +156,65 @@ export function ScriptBoardView({ page }: { page: Page }) {
   const cancelPending = () => {
     setPendingFrom(null);
     setPointer(null);
+  };
+
+  const shiftCanvas = (dx: number, dy: number) => {
+    const element = scrollRef.current;
+    if (!element) {
+      return;
+    }
+    setOrigin((current) => ({
+      x: current.x + dx,
+      y: current.y + dy,
+    }));
+    setCanvasExtent((current) => ({
+      width: current.width + Math.abs(dx),
+      height: current.height + Math.abs(dy),
+    }));
+    window.requestAnimationFrame(() => {
+      element.scrollLeft += dx < 0 ? Math.abs(dx) : 0;
+      element.scrollTop += dy < 0 ? Math.abs(dy) : 0;
+    });
+  };
+
+  const handleWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    const element = scrollRef.current;
+    if (!element) {
+      return;
+    }
+    if (event.deltaX < -2 && element.scrollLeft <= 0) {
+      event.preventDefault();
+      shiftCanvas(-1200, 0);
+    } else if (event.deltaY < -2 && element.scrollTop <= 0) {
+      event.preventDefault();
+      shiftCanvas(0, -800);
+    }
+  };
+
+  const growCanvas = () => {
+    const element = scrollRef.current;
+    if (!element) {
+      return;
+    }
+    setCanvasExtent((current) => {
+      let width = current.width;
+      let height = current.height;
+      if (
+        element.scrollLeft + element.clientWidth >
+        width - Math.max(240, element.clientWidth * 0.25)
+      ) {
+        width += 1200;
+      }
+      if (
+        element.scrollTop + element.clientHeight >
+        height - Math.max(240, element.clientHeight * 0.25)
+      ) {
+        height += 800;
+      }
+      return width === current.width && height === current.height
+        ? current
+        : { width, height };
+    });
   };
 
   const openAi = () => {
@@ -186,7 +259,7 @@ export function ScriptBoardView({ page }: { page: Page }) {
         <div className="script-board-meta">
           <span>{board.blocks.length} 个积木</span>
           <span>{board.connections.length} 条连接</span>
-          <small>点击尾部端点再点击头部端点连线</small>
+          <small>点击尾部再点击头部，或从尾部拖到头部连线；滚动到边缘自动扩展画板</small>
         </div>
         <div className="script-board-actions">
           <button
@@ -222,10 +295,18 @@ export function ScriptBoardView({ page }: { page: Page }) {
         </div>
       </div>
 
-      <div className="script-board-scroll">
+      <div
+        ref={scrollRef}
+        className="script-board-scroll"
+        onScroll={growCanvas}
+        onWheel={handleWheel}
+      >
         <div
           ref={canvasRef}
-          className="script-board-canvas"
+          className={clsx(
+            "script-board-canvas",
+            pendingFrom && "is-connecting",
+          )}
           style={{ width: canvasWidth, height: canvasHeight }}
           onClick={cancelPending}
           onPointerMove={(event) => {
@@ -290,6 +371,7 @@ export function ScriptBoardView({ page }: { page: Page }) {
 
           {board.blocks.map((block) => {
             const template = scriptBlockTemplate(block.kind);
+            const display = blockById.get(block.id) ?? block;
             return (
               <div
                 key={block.id}
@@ -299,8 +381,8 @@ export function ScriptBoardView({ page }: { page: Page }) {
                   pendingFrom === block.id && "is-pending-source",
                 )}
                 style={{
-                  left: block.x,
-                  top: block.y,
+                  left: display.x,
+                  top: display.y,
                   width: block.width,
                   height: block.height,
                 }}
@@ -309,10 +391,20 @@ export function ScriptBoardView({ page }: { page: Page }) {
                 <button
                   type="button"
                   className="script-port is-head"
-                  title="头部节点：点击连接"
+                  title="头部节点：点击或松开以连接"
+                  onPointerUp={(event) => {
+                    event.stopPropagation();
+                    handleHead(block.id);
+                  }}
                   onClick={(event) => {
                     event.stopPropagation();
                     handleHead(block.id);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      handleHead(block.id);
+                    }
                   }}
                 />
                 <div
@@ -366,10 +458,16 @@ export function ScriptBoardView({ page }: { page: Page }) {
                 <button
                   type="button"
                   className="script-port is-tail"
-                  title="尾部节点：点击后选择另一个积木的头部"
-                  onClick={(event) => {
+                  title="尾部节点：点击后选择头部，或直接拖到目标头部"
+                  onPointerDown={(event) => {
                     event.stopPropagation();
                     handleTail(block.id);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      handleTail(block.id);
+                    }
                   }}
                 />
               </div>
