@@ -4432,6 +4432,28 @@ body.is-resizing-sidebars * {
   height: 30px;
 }
 
+.file-project-scope {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--md-outline-variant);
+  background: var(--md-surface-container);
+  color: var(--md-on-surface-variant);
+  font-size: 9.5px;
+}
+
+.file-project-scope strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--md-on-surface);
+  font-weight: 650;
+}
+
 .file-panel-empty,
 .file-panel-error {
   flex: 1;

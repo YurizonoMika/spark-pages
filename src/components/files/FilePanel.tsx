@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { openPath } from "@tauri-apps/plugin-opener";
 import {
@@ -41,6 +41,10 @@ function formatBytes(bytes: number): string {
 
 function fileName(path: string): string {
   return path.split("/").pop() ?? path;
+}
+
+function folderLabel(folder: string): string {
+  return folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || folder;
 }
 
 function languageFor(path: string): CodeLanguage | null {
@@ -87,8 +91,20 @@ export function FilePanel() {
   const [content, setContent] = useState("");
   const [contentLoading, setContentLoading] = useState(false);
   const [contentError, setContentError] = useState<string | null>(null);
+  const requestRef = useRef(0);
+
+  const visibleEntries = entries.filter((entry) => {
+    const path = entry.path.replaceAll("\\", "/");
+    return (
+      path.length > 0 &&
+      !path.startsWith("/") &&
+      !path.split("/").some((part) => part === ".." || part === "")
+    );
+  });
 
   const refresh = useCallback(async () => {
+    const requestId = requestRef.current + 1;
+    requestRef.current = requestId;
     if (!projectFolder || !tauri) {
       setEntries([]);
       setError(null);
@@ -98,6 +114,9 @@ export function FilePanel() {
     setError(null);
     try {
       const next = await listProjectFiles(projectFolder);
+      if (requestRef.current !== requestId) {
+        return;
+      }
       setEntries(next);
       setSelectedPath((current) =>
         current && next.some((entry) => entry.path === current)
@@ -105,6 +124,9 @@ export function FilePanel() {
           : next.find((entry) => !entry.isDir)?.path ?? null,
       );
     } catch (refreshError) {
+      if (requestRef.current !== requestId) {
+        return;
+      }
       setEntries([]);
       setSelectedPath(null);
       setError(
@@ -113,9 +135,18 @@ export function FilePanel() {
           : "无法读取项目文件夹",
       );
     } finally {
-      setLoading(false);
+      if (requestRef.current === requestId) {
+        setLoading(false);
+      }
     }
   }, [projectFolder, tauri]);
+
+  useEffect(() => {
+    setEntries([]);
+    setSelectedPath(null);
+    setContent("");
+    setContentError(null);
+  }, [projectFolder]);
 
   useEffect(() => {
     void refresh();
@@ -247,7 +278,7 @@ export function FilePanel() {
   };
 
   const selectedLanguage = selectedPath ? languageFor(selectedPath) : null;
-  const selectedEntry = entries.find(
+  const selectedEntry = visibleEntries.find(
     (entry) => !entry.isDir && entry.path === selectedPath,
   );
   const selectedIsSpark =
@@ -276,6 +307,14 @@ export function FilePanel() {
           ) : null}
         </div>
 
+        {projectFolder ? (
+          <div className="file-project-scope" title={projectFolder}>
+            <Folder size={13} />
+            <span>当前项目</span>
+            <strong>{folderLabel(projectFolder)}</strong>
+          </div>
+        ) : null}
+
         {!projectFolder ? (
           <div className="file-panel-empty">
             <Folder size={22} />
@@ -290,15 +329,15 @@ export function FilePanel() {
         ) : (
           <>
             <div className="file-list">
-              {loading && entries.length === 0 ? (
+              {loading && visibleEntries.length === 0 ? (
                 <div className="file-list-loading">
                   <Loader2 size={14} className="spin" />
                   正在读取文件…
                 </div>
-              ) : entries.length === 0 ? (
+              ) : visibleEntries.length === 0 ? (
                 <p className="file-list-empty">文件夹为空</p>
               ) : (
-                entries.map((entry) => {
+                visibleEntries.map((entry) => {
                   const depth = entry.path.split("/").length - 1;
                   if (entry.isDir) {
                     return (
