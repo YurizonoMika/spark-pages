@@ -109,9 +109,9 @@ const ANIMATION_TRIGGER_SCRIPT = String.raw`<script>
       }
       var style = layers[index].getAttribute("data-spark-anim-style");
       if (!style) continue;
-      layers[index].style.animation = "none";
+      layers[index].style.cssText = "animation:none;";
       void layers[index].offsetWidth;
-      layers[index].style.animation = style + "animation-play-state:running;";
+      layers[index].style.cssText = style + "animation-play-state:running;";
     }
   }
 
