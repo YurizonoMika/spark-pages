@@ -53,6 +53,39 @@ describe("project XML", () => {
     });
   });
 
+  it("round-trips the page script board", () => {
+    const project = defaultProject();
+    const page = project.pages[0];
+    page.scriptBoard = {
+      blocks: [
+        {
+          id: "block_a",
+          kind: "event",
+          title: "点击按钮",
+          code: 'document.getElementById("cta").addEventListener("click", () => {\n  console.log("hi");\n});',
+          x: 80,
+          y: 120,
+          width: 260,
+          height: 168,
+        },
+        {
+          id: "block_b",
+          kind: "console",
+          title: "打印",
+          code: 'console.log("done");',
+          x: 420,
+          y: 120,
+          width: 260,
+          height: 168,
+        },
+      ],
+      connections: [{ id: "conn_a", from: "block_a", to: "block_b" }],
+    };
+
+    const parsed = parseProjectXml(serializeProject(project));
+    expect(parsed.pages[0].scriptBoard).toEqual(page.scriptBoard);
+  });
+
   it("round-trips multiple animation groups", () => {
     const project = defaultProject();
     const page = project.pages[0];

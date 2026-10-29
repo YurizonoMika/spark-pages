@@ -26,6 +26,9 @@ import type {
   Project,
   ProjectType,
   PropValue,
+  ScriptBlock,
+  ScriptBoard,
+  ScriptBlockKind,
   Theme,
 } from "../model/types";
 import { escapeXmlAttr, wrapCdata } from "../lib/escape";
@@ -219,6 +222,50 @@ function parseKeyframes(element: Element | undefined): KeyframeAnimation | undef
   return hasKeyframes(config) ? config : undefined;
 }
 
+function parseScriptBoard(
+  element: Element | undefined,
+): ScriptBoard | undefined {
+  if (!element) {
+    return undefined;
+  }
+  const blocks: ScriptBlock[] = directChildren(element, "block")
+    .map((block) => {
+      const id = readAttr(block, "id")?.trim();
+      if (!id) {
+        return null;
+      }
+      const codeElement = directChildren(block, "code")[0];
+      return {
+        id,
+        kind: (readAttr(block, "kind") ?? "custom") as ScriptBlockKind,
+        title: readAttr(block, "title") ?? "积木",
+        code: codeElement?.textContent ?? "",
+        x: numberAttr(block, "x", "脚本积木", 0),
+        y: numberAttr(block, "y", "脚本积木", 0),
+        width: Math.max(numberAttr(block, "width", "脚本积木", 260), 120),
+        height: Math.max(numberAttr(block, "height", "脚本积木", 168), 80),
+      };
+    })
+    .filter((block): block is ScriptBlock => Boolean(block));
+  const blockIds = new Set(blocks.map((block) => block.id));
+  const connections = directChildren(element, "connection")
+    .map((connection) => {
+      const id = readAttr(connection, "id")?.trim();
+      const from = readAttr(connection, "from")?.trim();
+      const to = readAttr(connection, "to")?.trim();
+      if (!id || !from || !to || !blockIds.has(from) || !blockIds.has(to)) {
+        return null;
+      }
+      return { id, from, to };
+    })
+    .filter((connection): connection is NonNullable<typeof connection> =>
+      Boolean(connection),
+    );
+  return blocks.length > 0 || connections.length > 0
+    ? { blocks, connections }
+    : undefined;
+}
+
 function parseModule(element: Element, pageContext: string): ModuleNode {
   const id = requiredAttr(element, "id", pageContext);
   const type = requiredAttr(element, "type", pageContext);
@@ -290,6 +337,9 @@ function parsePage(element: Element): Page {
   const animationGroups = parseAnimationGroups(
     directChildren(element, "animation-groups")[0],
   );
+  const scriptBoard = parseScriptBoard(
+    directChildren(element, "script-board")[0],
+  );
   const customScriptElement = directChildren(element, "custom-script")[0];
   const customScript = customScriptElement?.textContent ?? "";
   const scriptLanguage =
@@ -311,6 +361,7 @@ function parsePage(element: Element): Page {
     ...(keyframes ? { keyframes } : {}),
     ...(animationTrigger ? { animationTrigger } : {}),
     ...(animationGroups ? { animationGroups } : {}),
+    ...(scriptBoard ? { scriptBoard } : {}),
   };
 }
 
@@ -519,6 +570,31 @@ function serializeKeyframes(
   return lines;
 }
 
+function serializeScriptBoard(
+  board: ScriptBoard | undefined,
+  level: number,
+): string[] {
+  if (!board || (board.blocks.length === 0 && board.connections.length === 0)) {
+    return [];
+  }
+  const pad = indent(level);
+  const lines = [`${pad}<script-board>`];
+  for (const block of board.blocks) {
+    lines.push(
+      `${pad}  <block${attr("id", block.id)}${attr("kind", block.kind)}${attr("title", block.title)}${attr("x", block.x)}${attr("y", block.y)}${attr("width", block.width)}${attr("height", block.height)}>`,
+    );
+    lines.push(`${pad}    <code>${wrapCdata(block.code)}</code>`);
+    lines.push(`${pad}  </block>`);
+  }
+  for (const connection of board.connections) {
+    lines.push(
+      `${pad}  <connection${attr("id", connection.id)}${attr("from", connection.from)}${attr("to", connection.to)} />`,
+    );
+  }
+  lines.push(`${pad}</script-board>`);
+  return lines;
+}
+
 function serializeModule(module: ModuleNode, level: number): string[] {
   const pad = indent(level);
   const anchorAttrs =
@@ -564,6 +640,7 @@ function serializePage(page: Page, level: number): string[] {
     lines.push(...serializeAnimations(page.animations, level + 1));
     lines.push(...serializeAnimationTrigger(page.animationTrigger, level + 1));
   }
+  lines.push(...serializeScriptBoard(page.scriptBoard, level + 1));
   if (page.customScript) {
     lines.push(
       `${pad}  <custom-script${attr("language", page.scriptLanguage === "typescript" ? "typescript" : "javascript")}>${wrapCdata(page.customScript)}</custom-script>`,

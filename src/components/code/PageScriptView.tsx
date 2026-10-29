@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useRef } from "react";
-import { Braces, FileCode2, Info } from "lucide-react";
+import {
+  Braces,
+  Code2,
+  FileCode2,
+  Info,
+  Network,
+} from "lucide-react";
 import clsx from "clsx";
 import {
   selectActivePage,
   useEditorStore,
 } from "../../store/editorStore";
 import { CodeEditor } from "./CodeEditor";
+import { ScriptBoardView } from "./ScriptBoardView";
 
 type ScriptLanguage = "javascript" | "typescript";
 
@@ -27,6 +34,11 @@ export function PageScriptView() {
     (state) => state.updatePageCodeTransient,
   );
   const tab: ScriptLanguage = page.scriptLanguage ?? "javascript";
+  const scriptView = useEditorStore((state) => state.scriptView);
+  const setScriptView = useEditorStore((state) => state.setScriptView);
+  const setLeftTab = useEditorStore((state) => state.setLeftTab);
+  const activeFilePath = useEditorStore((state) => state.activeFilePath);
+  const showBoard = !activeFilePath && scriptView === "board";
   const scriptReveal = useEditorStore((state) => state.scriptReveal);
   const reveal =
     scriptReveal && scriptReveal.pageId === page.id
@@ -86,10 +98,44 @@ export function PageScriptView() {
             <strong>页面脚本</strong>
             <small>{page.title}</small>
           </div>
-          <div className="code-script-switch" role="tablist">
-            {scriptTabs.map((item) => {
-              const Icon = item.icon;
-              return (
+          {!activeFilePath ? (
+            <div className="script-view-toggle" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={showBoard}
+                className={clsx(
+                  "code-script-button",
+                  showBoard && "is-active",
+                )}
+                onClick={() => {
+                  setScriptView("board");
+                  setLeftTab("modules");
+                }}
+              >
+                <Network size={11} />
+                画板
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!showBoard}
+                className={clsx(
+                  "code-script-button",
+                  !showBoard && "is-active",
+                )}
+                onClick={() => setScriptView("code")}
+              >
+                <Code2 size={11} />
+                代码
+              </button>
+            </div>
+          ) : null}
+          {!showBoard ? (
+            <div className="code-script-switch" role="tablist">
+              {scriptTabs.map((item) => {
+                const Icon = item.icon;
+                return (
                 <button
                   key={item.id}
                   type="button"
@@ -111,41 +157,48 @@ export function PageScriptView() {
                   <Icon size={11} />
                   {item.label}
                 </button>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : null}
         </header>
 
-        <div className="code-note">
-          <Info size={13} />
-          <span>
-            {tab === "javascript"
-              ? "JavaScript 在 XML 设计稿预览中执行，并会作为构建页面的设计上下文。"
-              : "TypeScript 仅作为构建上下文保存，不在 XML 设计稿预览中直接执行。"}
-          </span>
-        </div>
+        {showBoard ? (
+          <ScriptBoardView page={page} />
+        ) : (
+          <>
+            <div className="code-note">
+              <Info size={13} />
+              <span>
+                {tab === "javascript"
+                  ? "JavaScript 在 XML 设计稿预览中执行，并会作为构建页面的设计上下文。"
+                  : "TypeScript 仅作为构建上下文保存，不在 XML 设计稿预览中直接执行。"}
+              </span>
+            </div>
 
-        <CodeEditor
-          key={`${page.id}:${tab}`}
-          value={value}
-          language={tab}
-          onChange={handleChange}
-          onBlur={flush}
-          reveal={reveal}
-        />
+            <CodeEditor
+              key={`${page.id}:${tab}`}
+              value={value}
+              language={tab}
+              onChange={handleChange}
+              onBlur={flush}
+              reveal={reveal}
+            />
 
-        <footer className="code-footer">
-          <span className="code-footer-hint">
-            {tab === "javascript"
-              ? "JavaScript 沙箱执行"
-              : "TypeScript 构建上下文"}{" "}
-            · 自动保存
-          </span>
-          <span className="code-position">
-            {tab === "javascript" ? "JavaScript" : "TypeScript"} · {lineCount} 行 ·
-            Ctrl/⌘+Space 补全
-          </span>
-        </footer>
+            <footer className="code-footer">
+              <span className="code-footer-hint">
+                {tab === "javascript"
+                  ? "JavaScript 沙箱执行"
+                  : "TypeScript 构建上下文"}{" "}
+                · 自动保存
+              </span>
+              <span className="code-position">
+                {tab === "javascript" ? "JavaScript" : "TypeScript"} ·{" "}
+                {lineCount} 行 · Ctrl/⌘+Space 补全
+              </span>
+            </footer>
+          </>
+        )}
       </section>
     </main>
   );

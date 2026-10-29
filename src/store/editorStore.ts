@@ -25,6 +25,9 @@ import type {
   Theme,
   DesignView,
   FileView,
+  ScriptBlock,
+  ScriptBlockKind,
+  ScriptView,
 } from "../model/types";
 import {
   DEFAULT_ANIMATION,
@@ -54,6 +57,11 @@ import {
   snap,
 } from "../lib/geometry";
 import { loadDraft } from "../lib/projectStorage";
+import {
+  createScriptBlock,
+  createScriptConnection,
+  emptyScriptBoard,
+} from "../model/scriptBoard";
 
 const HISTORY_LIMIT = 100;
 
@@ -139,6 +147,7 @@ export interface EditorState {
   showGrid: boolean;
   designView: DesignView;
   fileView: FileView;
+  scriptView: ScriptView;
   leftTab: LeftTab;
   inspectorOpen: boolean;
   projectFolder: string | null;
@@ -292,6 +301,28 @@ export interface EditorState {
   setZoom: (zoom: number) => void;
   setDesignView: (view: DesignView) => void;
   setFileView: (view: FileView) => void;
+  setScriptView: (view: ScriptView) => void;
+  addScriptBlock: (
+    kind: ScriptBlockKind,
+    x?: number,
+    y?: number,
+  ) => string;
+  updateScriptBlock: (
+    id: string,
+    patch: Partial<
+      Pick<ScriptBlock, "title" | "code" | "x" | "y" | "width" | "height">
+    >,
+  ) => void;
+  updateScriptBlockTransient: (
+    id: string,
+    patch: Partial<
+      Pick<ScriptBlock, "title" | "code" | "x" | "y" | "width" | "height">
+    >,
+  ) => void;
+  removeScriptBlock: (id: string) => void;
+  connectScriptBlocks: (from: string, to: string) => boolean;
+  removeScriptConnection: (id: string) => void;
+  clearScriptBoard: () => void;
   setLeftTab: (tab: LeftTab) => void;
   setInspectorOpen: (open: boolean) => void;
   setProjectFolder: (folder: string | null) => void;
@@ -552,6 +583,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   showGrid: true,
   designView: "canvas",
   fileView: "code",
+  scriptView: "code",
   leftTab: "ai",
   inspectorOpen: true,
   projectFolder: restored?.projectFolder ?? null,
@@ -1588,6 +1620,112 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     set({ fileView: view });
   },
 
+  setScriptView(view) {
+    set({ scriptView: view });
+  },
+
+  addScriptBlock(kind, x, y) {
+    const state = get();
+    const page = activePageOf(state.project, state.activePageId);
+    const existing = page.scriptBoard ?? emptyScriptBoard();
+    const index = existing.blocks.length;
+    const block = createScriptBlock(
+      kind,
+      x ?? 80 + (index % 4) * 300,
+      y ?? 80 + Math.floor(index / 4) * 210,
+    );
+    get().commit((draft) => {
+      const target = activePageOf(draft, state.activePageId);
+      const board = target.scriptBoard ?? emptyScriptBoard();
+      board.blocks.push(block);
+      target.scriptBoard = board;
+    });
+    return block.id;
+  },
+
+  updateScriptBlock(id, patch) {
+    get().commit((draft) => {
+      const page = activePageOf(draft, get().activePageId);
+      const block = page.scriptBoard?.blocks.find(
+        (candidate) => candidate.id === id,
+      );
+      if (block) {
+        Object.assign(block, patch);
+      }
+    });
+  },
+
+  updateScriptBlockTransient(id, patch) {
+    get().updateTransient((draft) => {
+      const page = activePageOf(draft, get().activePageId);
+      const block = page.scriptBoard?.blocks.find(
+        (candidate) => candidate.id === id,
+      );
+      if (block) {
+        Object.assign(block, patch);
+      }
+    });
+  },
+
+  removeScriptBlock(id) {
+    get().commit((draft) => {
+      const page = activePageOf(draft, get().activePageId);
+      if (!page.scriptBoard) {
+        return;
+      }
+      page.scriptBoard.blocks = page.scriptBoard.blocks.filter(
+        (block) => block.id !== id,
+      );
+      page.scriptBoard.connections = page.scriptBoard.connections.filter(
+        (connection) => connection.from !== id && connection.to !== id,
+      );
+    });
+  },
+
+  connectScriptBlocks(from, to) {
+    const state = get();
+    const page = activePageOf(state.project, state.activePageId);
+    const board = page.scriptBoard;
+    if (
+      !board ||
+      from === to ||
+      !board.blocks.some((block) => block.id === from) ||
+      !board.blocks.some((block) => block.id === to) ||
+      board.connections.some(
+        (connection) =>
+          connection.from === from && connection.to === to,
+      )
+    ) {
+      return false;
+    }
+    const connection = createScriptConnection(from, to);
+    get().commit((draft) => {
+      const target = activePageOf(draft, state.activePageId);
+      if (target.scriptBoard) {
+        target.scriptBoard.connections.push(connection);
+      }
+    });
+    return true;
+  },
+
+  removeScriptConnection(id) {
+    get().commit((draft) => {
+      const page = activePageOf(draft, get().activePageId);
+      if (page.scriptBoard) {
+        page.scriptBoard.connections = page.scriptBoard.connections.filter(
+          (connection) => connection.id !== id,
+        );
+      }
+    });
+  },
+
+  clearScriptBoard() {
+    get().commit((draft) => {
+      const page = activePageOf(draft, get().activePageId);
+      delete page.scriptBoard;
+    });
+  },
+
   setLeftTab(tab) {
     set({ leftTab: tab });
   },
@@ -1748,6 +1886,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       zoom: 0.75,
       designView: "canvas",
       fileView: "code",
+      scriptView: "code",
       settingsOpen: false,
       buildOpen: false,
       pageBuildOpen: false,
@@ -1775,6 +1914,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       dirty: false,
       designView: "canvas",
       fileView: "code",
+      scriptView: "code",
       pageBuildOpen: false,
     });
   },

@@ -41,6 +41,43 @@ export interface AnimationGroup {
   triggers: AnimationTrigger[];
 }
 
+export type ScriptView = "board" | "code";
+
+export type ScriptBlockKind =
+  | "start"
+  | "event"
+  | "variable"
+  | "if"
+  | "loop"
+  | "function"
+  | "fetch"
+  | "return"
+  | "console"
+  | "comment"
+  | "custom";
+
+export interface ScriptBlock {
+  id: string;
+  kind: ScriptBlockKind;
+  title: string;
+  code: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ScriptConnection {
+  id: string;
+  from: string;
+  to: string;
+}
+
+export interface ScriptBoard {
+  blocks: ScriptBlock[];
+  connections: ScriptConnection[];
+}
+
 export type KeyframeProperty = string;
 export type AnchorX = "left" | "right";
 export type AnchorY = "top" | "bottom";
@@ -84,6 +121,7 @@ export interface Page {
   modules: ModuleNode[];
   customScript?: string;
   scriptLanguage?: "javascript" | "typescript";
+  scriptBoard?: ScriptBoard;
   file?: string;
   animations?: AnimationConfig;
   keyframes?: KeyframeAnimation;

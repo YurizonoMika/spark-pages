@@ -36,6 +36,21 @@ describe("project storage migration", () => {
       },
     ];
     page.animationTrigger = { type: "custom", code: "return true;" };
+    page.scriptBoard = {
+      blocks: [
+        {
+          id: "block_a",
+          kind: "custom",
+          title: "草稿",
+          code: 'console.log("draft");',
+          x: 0,
+          y: 0,
+          width: 260,
+          height: 168,
+        },
+      ],
+      connections: [],
+    };
 
     const parsed = projectSchema.parse(project);
 
@@ -54,6 +69,9 @@ describe("project storage migration", () => {
       type: "custom",
       code: "return true;",
     });
+    expect(parsed.pages[0].scriptBoard?.blocks[0].code).toBe(
+      'console.log("draft");',
+    );
   });
 
   it("keeps HTML projects on the static template", () => {

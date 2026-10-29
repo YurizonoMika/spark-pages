@@ -93,6 +93,34 @@ describe("editor store", () => {
     expect((module?.height ?? 0) % 24).toBe(0);
   });
 
+  it("edits script board blocks and connections", () => {
+    const first = useEditorStore.getState().addScriptBlock("event", 40, 60);
+    const second = useEditorStore.getState().addScriptBlock("console", 360, 60);
+    expect(useEditorStore.getState().connectScriptBlocks(first, second)).toBe(
+      true,
+    );
+    expect(
+      useEditorStore.getState().connectScriptBlocks(first, second),
+    ).toBe(false);
+
+    useEditorStore.getState().updateScriptBlock(first, {
+      title: "点击",
+      code: 'console.log("click");',
+    });
+    let page = useEditorStore.getState().project.pages[0];
+    expect(page.scriptBoard?.blocks).toHaveLength(2);
+    expect(page.scriptBoard?.connections).toHaveLength(1);
+    expect(page.scriptBoard?.blocks[0]).toMatchObject({
+      title: "点击",
+      code: 'console.log("click");',
+    });
+
+    useEditorStore.getState().removeScriptBlock(second);
+    page = useEditorStore.getState().project.pages[0];
+    expect(page.scriptBoard?.blocks).toHaveLength(1);
+    expect(page.scriptBoard?.connections).toHaveLength(0);
+  });
+
   it("manages multiple animation groups per module", () => {
     const id = useEditorStore
       .getState()

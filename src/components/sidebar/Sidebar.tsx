@@ -11,6 +11,7 @@ import { aiConfigReady, useAiSettingsStore } from "../../lib/ai/settings";
 import type { LeftTab } from "../../model/types";
 import { AIChatPanel } from "./AIChatPanel";
 import { ModulePalette } from "./ModulePalette";
+import { ScriptBlockPalette } from "./ScriptBlockPalette";
 import { LayersPanel } from "./LayersPanel";
 import { PagesPanel } from "./PagesPanel";
 import { FilePanel } from "../files/FilePanel";
@@ -40,7 +41,15 @@ export function Sidebar() {
   const setLeftTab = useEditorStore((state) => state.setLeftTab);
   const configured = useAiSettingsStore((state) => aiConfigReady(state));
   const projectFolder = useEditorStore((state) => state.projectFolder);
-  const header = headers[leftTab];
+  const designView = useEditorStore((state) => state.designView);
+  const scriptView = useEditorStore((state) => state.scriptView);
+  const activeFilePath = useEditorStore((state) => state.activeFilePath);
+  const boardActive =
+    !activeFilePath && designView === "script" && scriptView === "board";
+  const header =
+    leftTab === "modules" && boardActive
+      ? { title: "积木库", subtitle: "拖入脚本画板" }
+      : headers[leftTab];
   const folderName = projectFolder
     ? projectFolder.replace(/[\\/]+$/, "").split(/[\\/]/).pop()
     : null;
@@ -54,6 +63,8 @@ export function Sidebar() {
       <nav className="sidebar-rail" aria-label="侧边栏">
         {tabs.map((tab) => {
           const Icon = tab.icon;
+          const label =
+            tab.id === "modules" && boardActive ? "积木" : tab.label;
           return (
             <button
               key={tab.id}
@@ -63,10 +74,10 @@ export function Sidebar() {
                 leftTab === tab.id && "is-active",
               )}
               onClick={() => setLeftTab(tab.id)}
-              title={tab.label}
+              title={label}
             >
               <Icon size={18} />
-              <span>{tab.label}</span>
+              <span>{label}</span>
             </button>
           );
         })}
@@ -94,7 +105,9 @@ export function Sidebar() {
         <div className={clsx("panel-body", leftTab === "files" && "is-files")}>
           {leftTab === "ai" ? <AIChatPanel /> : null}
           {leftTab === "files" ? <FilePanel /> : null}
-          {leftTab === "modules" ? <ModulePalette /> : null}
+          {leftTab === "modules" ? (
+            boardActive ? <ScriptBlockPalette /> : <ModulePalette />
+          ) : null}
           {leftTab === "layers" ? <LayersPanel /> : null}
           {leftTab === "pages" ? <PagesPanel /> : null}
         </div>

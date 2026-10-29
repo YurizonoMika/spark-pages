@@ -72,6 +72,40 @@ const moduleSchema = z.object({
   animationGroups: z.array(animationGroupSchema).optional(),
 });
 
+const scriptBlockSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum([
+    "start",
+    "event",
+    "variable",
+    "if",
+    "loop",
+    "function",
+    "fetch",
+    "return",
+    "console",
+    "comment",
+    "custom",
+  ]),
+  title: z.string().default("积木"),
+  code: z.string().default(""),
+  x: z.number(),
+  y: z.number(),
+  width: z.number().positive().default(260),
+  height: z.number().positive().default(168),
+});
+
+const scriptConnectionSchema = z.object({
+  id: z.string().min(1),
+  from: z.string().min(1),
+  to: z.string().min(1),
+});
+
+const scriptBoardSchema = z.object({
+  blocks: z.array(scriptBlockSchema).default([]),
+  connections: z.array(scriptConnectionSchema).default([]),
+});
+
 const pageSchema = z.object({
   id: z.string().min(1),
   title: z.string(),
@@ -82,6 +116,7 @@ const pageSchema = z.object({
   modules: z.array(moduleSchema),
   customScript: z.string().optional(),
   scriptLanguage: z.enum(["javascript", "typescript"]).optional(),
+  scriptBoard: scriptBoardSchema.optional(),
   file: z.string().optional(),
   animations: animationSchema.optional(),
   keyframes: keyframeAnimationSchema.optional(),
