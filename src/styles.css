@@ -5602,6 +5602,35 @@ body.is-resizing-sidebars * {
   background: var(--md-primary);
 }
 
+.script-board-canvas.is-wand .script-block {
+  cursor: pointer;
+}
+
+.script-block.is-wand-selected {
+  border-color: var(--md-primary);
+  box-shadow:
+    0 0 0 3px var(--md-primary-container),
+    var(--elev-2);
+}
+
+.script-board-canvas.is-wand .script-block-code,
+.script-board-canvas.is-wand .script-block-title {
+  pointer-events: none;
+}
+
+.script-board-canvas.is-wand .script-port {
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+.script-board-selection {
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  background: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+  font-weight: 650;
+}
+
 .script-board-canvas.is-drop-target {
   outline: 2px dashed var(--md-primary);
   outline-offset: -8px;

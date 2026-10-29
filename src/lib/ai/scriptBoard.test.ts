@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { defaultProject } from "../../model/defaults";
-import { buildScriptBoardMessages } from "./scriptBoard";
+import {
+  buildScriptBoardMessages,
+  buildSelectedBlockMessages,
+} from "./scriptBoard";
 
 describe("script board AI prompt", () => {
   it("includes block code and connections", () => {
@@ -51,5 +54,47 @@ describe("script board AI prompt", () => {
     expect(user).toContain("自然语言说明");
     expect(user).toContain("点击按钮后显示一段提示文字。");
     expect(user).toContain("保留变量名");
+  });
+
+  it("only includes wand-selected blocks in edit prompts", () => {
+    const project = defaultProject();
+    const page = project.pages[0];
+    page.scriptBoard = {
+      blocks: [
+        {
+          id: "selected",
+          kind: "custom",
+          title: "选中",
+          code: 'console.log("selected");',
+          x: 0,
+          y: 0,
+          width: 260,
+          height: 168,
+        },
+        {
+          id: "other",
+          kind: "custom",
+          title: "未选中",
+          code: 'console.log("other");',
+          x: 300,
+          y: 0,
+          width: 260,
+          height: 168,
+        },
+      ],
+      connections: [],
+    };
+
+    const messages = buildSelectedBlockMessages(
+      page,
+      ["selected"],
+      "增加错误处理",
+    );
+    const user = messages[1].content ?? "";
+    expect(user).toContain("selected");
+    expect(user).toContain('console.log("selected");');
+    expect(user).not.toContain('console.log("other");');
+    expect(user).toContain("增加错误处理");
+    expect(messages[0].content).toContain('"blocks"');
   });
 });

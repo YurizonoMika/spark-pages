@@ -319,6 +319,9 @@ export interface EditorState {
       Pick<ScriptBlock, "title" | "code" | "x" | "y" | "width" | "height">
     >,
   ) => void;
+  updateScriptBlocks: (
+    updates: Array<{ id: string; title?: string; code: string }>,
+  ) => void;
   removeScriptBlock: (id: string) => void;
   connectScriptBlocks: (from: string, to: string) => boolean;
   removeScriptConnection: (id: string) => void;
@@ -1663,6 +1666,27 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       );
       if (block) {
         Object.assign(block, patch);
+      }
+    });
+  },
+
+  updateScriptBlocks(updates) {
+    get().commit((draft) => {
+      const page = activePageOf(draft, get().activePageId);
+      if (!page.scriptBoard) {
+        return;
+      }
+      const byId = new Map(
+        page.scriptBoard.blocks.map((block) => [block.id, block]),
+      );
+      for (const update of updates) {
+        const block = byId.get(update.id);
+        if (block) {
+          block.code = update.code;
+          if (update.title !== undefined) {
+            block.title = update.title;
+          }
+        }
       }
     });
   },

@@ -10,6 +10,7 @@ import {
   Loader2,
   LocateFixed,
   Sparkles,
+  Wand2,
   Trash2,
   X,
 } from "lucide-react";
@@ -28,7 +29,10 @@ import {
   aiConfigReady,
   useAiSettingsStore,
 } from "../../lib/ai/settings";
-import { generateScriptFromBoard } from "../../lib/ai/scriptBoard";
+import {
+  generateScriptFromBoard,
+  generateSelectedBlockUpdates,
+} from "../../lib/ai/scriptBoard";
 import { toast } from "../../store/toastStore";
 import {
   SCRIPT_BLOCK_DRAG_TYPE,
@@ -58,6 +62,9 @@ export function ScriptBoardView({ page }: { page: Page }) {
     (state) => state.updateScriptBlockTransient,
   );
   const addScriptBlock = useEditorStore((state) => state.addScriptBlock);
+  const updateScriptBlocks = useEditorStore(
+    (state) => state.updateScriptBlocks,
+  );
   const removeScriptBlock = useEditorStore(
     (state) => state.removeScriptBlock,
   );
@@ -97,6 +104,12 @@ export function ScriptBoardView({ page }: { page: Page }) {
   const [instruction, setInstruction] = useState("");
   const [generating, setGenerating] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [wandActive, setWandActive] = useState(false);
+  const [selectedBlockIds, setSelectedBlockIds] = useState<string[]>([]);
+  const [blockAiOpen, setBlockAiOpen] = useState(false);
+  const [blockInstruction, setBlockInstruction] = useState("");
+  const [blockGenerating, setBlockGenerating] = useState(false);
+  const [blockAiError, setBlockAiError] = useState<string | null>(null);
 
   const visualBlocks = board.blocks.map((block) => ({
     ...block,
@@ -120,7 +133,7 @@ export function ScriptBoardView({ page }: { page: Page }) {
     event: ReactPointerEvent<HTMLDivElement>,
     block: ScriptBlock,
   ) => {
-    if (event.button !== 0) {
+    if (event.button !== 0 || wandActive) {
       return;
     }
     event.preventDefault();
@@ -280,6 +293,52 @@ export function ScriptBoardView({ page }: { page: Page }) {
     });
   };
 
+  const toggleBlockSelection = (id: string) => {
+    setSelectedBlockIds((current) =>
+      current.includes(id)
+        ? current.filter((candidate) => candidate !== id)
+        : [...current, id],
+    );
+  };
+
+  const openBlockAi = () => {
+    if (!aiConfigReady({ baseUrl, model, temperature, maxTokens })) {
+      toast("请先在设置中配置模型", "info");
+      setSettingsOpen(true, "ai");
+      return;
+    }
+    if (selectedBlockIds.length === 0) {
+      toast("请先用魔杖选择要修改的积木", "info");
+      return;
+    }
+    setBlockAiError(null);
+    setBlockAiOpen(true);
+  };
+
+  const generateBlockEdits = async () => {
+    setBlockGenerating(true);
+    setBlockAiError(null);
+    try {
+      const updates = await generateSelectedBlockUpdates(
+        activePage,
+        selectedBlockIds,
+        { baseUrl, model, temperature, maxTokens },
+        blockInstruction,
+      );
+      updateScriptBlocks(updates);
+      setBlockAiOpen(false);
+      setWandActive(false);
+      setSelectedBlockIds([]);
+      toast(`AI 已修改 ${updates.length} 个积木`, "success");
+    } catch (error) {
+      setBlockAiError(
+        error instanceof Error ? error.message : "AI 修改积木失败",
+      );
+    } finally {
+      setBlockGenerating(false);
+    }
+  };
+
   const openAi = () => {
     if (!aiConfigReady({ baseUrl, model, temperature, maxTokens })) {
       toast("请先在设置中配置模型", "info");
@@ -322,7 +381,16 @@ export function ScriptBoardView({ page }: { page: Page }) {
         <div className="script-board-meta">
           <span>{board.blocks.length} 个积木</span>
           <span>{board.connections.length} 条连接</span>
-          <small>点击尾部再点击头部，或从尾部拖到头部连线；滚动到边缘自动扩展画板</small>
+          {wandActive ? (
+            <span className="script-board-selection">
+              已选 {selectedBlockIds.length} 个
+            </span>
+          ) : null}
+          <small>
+            {wandActive
+              ? "魔杖模式：点击积木选择，再次点击取消"
+              : "点击尾部再点击头部，或从尾部拖到头部连线；滚动到边缘自动扩展画板"}
+          </small>
         </div>
         <div className="script-board-actions">
           <button
@@ -335,6 +403,7 @@ export function ScriptBoardView({ page }: { page: Page }) {
               ) {
                 clearScriptBoard();
                 cancelPending();
+                setSelectedBlockIds([]);
               }
             }}
             disabled={board.blocks.length === 0}
@@ -351,6 +420,34 @@ export function ScriptBoardView({ page }: { page: Page }) {
           >
             <LocateFixed size={13} />
             定位
+          </button>
+          <button
+            type="button"
+            className={clsx(
+              "btn",
+              wandActive ? "btn-accent" : "btn-ghost",
+            )}
+            onClick={() => {
+              setWandActive((current) => !current);
+              setSelectedBlockIds([]);
+            }}
+            title="魔杖选择积木"
+          >
+            <Wand2 size={13} />
+            魔杖
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={openBlockAi}
+            disabled={selectedBlockIds.length === 0 || blockGenerating}
+          >
+            {blockGenerating ? (
+              <Loader2 size={14} className="spin" />
+            ) : (
+              <Sparkles size={14} />
+            )}
+            AI 修改选中
           </button>
           <button
             type="button"
@@ -380,9 +477,16 @@ export function ScriptBoardView({ page }: { page: Page }) {
             "script-board-canvas",
             pendingFrom && "is-connecting",
             dropActive && "is-drop-target",
+            wandActive && "is-wand",
           )}
           style={{ width: canvasWidth, height: canvasHeight }}
-          onClick={cancelPending}
+          onClick={() => {
+            if (wandActive) {
+              setSelectedBlockIds([]);
+            } else {
+              cancelPending();
+            }
+          }}
           onDragOver={(event) => {
             if (
               event.dataTransfer.types.includes(SCRIPT_BLOCK_DRAG_TYPE) ||
@@ -471,6 +575,7 @@ export function ScriptBoardView({ page }: { page: Page }) {
                   "script-block",
                   `is-${block.kind}`,
                   pendingFrom === block.id && "is-pending-source",
+                  selectedBlockIds.includes(block.id) && "is-wand-selected",
                 )}
                 style={{
                   left: display.x,
@@ -478,11 +583,17 @@ export function ScriptBoardView({ page }: { page: Page }) {
                   width: block.width,
                   height: block.height,
                 }}
-                onClick={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (wandActive) {
+                    toggleBlockSelection(block.id);
+                  }
+                }}
               >
                 <button
                   type="button"
                   className="script-port is-head"
+                  disabled={wandActive}
                   title="头部节点：点击或松开以连接"
                   onPointerUp={(event) => {
                     event.stopPropagation();
@@ -507,6 +618,7 @@ export function ScriptBoardView({ page }: { page: Page }) {
                   <input
                     className="script-block-title"
                     value={block.title}
+                    readOnly={wandActive}
                     onFocus={beginTransaction}
                     onPointerDown={(event) => event.stopPropagation()}
                     onClick={(event) => event.stopPropagation()}
@@ -521,10 +633,14 @@ export function ScriptBoardView({ page }: { page: Page }) {
                     type="button"
                     className="script-block-delete"
                     title="删除积木"
+                    disabled={wandActive}
                     onPointerDown={(event) => event.stopPropagation()}
                     onClick={(event) => {
                       event.stopPropagation();
                       removeScriptBlock(block.id);
+                      setSelectedBlockIds((current) =>
+                        current.filter((candidate) => candidate !== block.id),
+                      );
                       if (pendingFrom === block.id) {
                         cancelPending();
                       }
@@ -536,6 +652,7 @@ export function ScriptBoardView({ page }: { page: Page }) {
                 <textarea
                   className="script-block-code"
                   spellCheck={false}
+                  readOnly={wandActive}
                   placeholder={
                     block.kind === "natural"
                       ? "用自然语言描述这段代码要实现的功能…"
@@ -555,6 +672,7 @@ export function ScriptBoardView({ page }: { page: Page }) {
                 <button
                   type="button"
                   className="script-port is-tail"
+                  disabled={wandActive}
                   title="尾部节点：点击后选择头部，或直接拖到目标头部"
                   onPointerDown={(event) => {
                     event.stopPropagation();
@@ -580,6 +698,62 @@ export function ScriptBoardView({ page }: { page: Page }) {
           ) : null}
         </div>
       </div>
+
+      {blockAiOpen ? (
+        <Modal
+          title="AI 修改选中积木"
+          subtitle={`${selectedBlockIds.length} 个积木`}
+          icon={<Wand2 size={17} />}
+          size="lg"
+          dismissable={!blockGenerating}
+          onClose={() => setBlockAiOpen(false)}
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setBlockAiOpen(false)}
+                disabled={blockGenerating}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="btn btn-accent"
+                onClick={() => void generateBlockEdits()}
+                disabled={blockGenerating}
+              >
+                {blockGenerating ? (
+                  <Loader2 size={14} className="spin" />
+                ) : (
+                  <Sparkles size={14} />
+                )}
+                {blockGenerating ? "正在修改…" : "生成并写回积木"}
+              </button>
+            </>
+          }
+        >
+          <div className="script-board-ai">
+            <p>
+              只把选中的积木发送给 AI。AI 会返回修改后的完整代码，并直接更新这些积木；
+              未选中的积木不会改变。
+            </p>
+            <label className="trigger-field">
+              <span>修改要求</span>
+              <textarea
+                rows={4}
+                value={blockInstruction}
+                onChange={(event) => setBlockInstruction(event.target.value)}
+                placeholder="例如：增加错误处理，把点击逻辑改成事件委托…"
+                disabled={blockGenerating}
+              />
+            </label>
+            {blockAiError ? (
+              <p className="panel-hint is-error">{blockAiError}</p>
+            ) : null}
+          </div>
+        </Modal>
+      ) : null}
 
       {aiOpen ? (
         <Modal

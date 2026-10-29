@@ -107,3 +107,126 @@ export async function generateScriptFromBoard(
   }
   return code;
 }
+
+export interface ScriptBlockUpdate {
+  id: string;
+  title?: string;
+  code: string;
+}
+
+export function buildSelectedBlockMessages(
+  page: Page,
+  blockIds: string[],
+  instruction: string,
+): ChatMessage[] {
+  const board = page.scriptBoard;
+  const selected = (board?.blocks ?? []).filter((block) =>
+    blockIds.includes(block.id),
+  );
+  if (selected.length === 0) {
+    throw new Error("没有选中的脚本积木");
+  }
+  const blocks = selected
+    .map((block) => {
+      const template = scriptBlockTemplate(block.kind);
+      return `### ${block.id} · ${template.label}
+标题：${block.title}
+当前内容：
+\`\`\`
+${block.code}
+\`\`\``;
+    })
+    .join("\n\n");
+  return [
+    {
+      role: "system",
+      content: `你是资深前端 JavaScript 工程师，正在修改脚本画板中被魔杖选中的积木。
+只修改选中的积木，不要重写未选中的积木。保留用户原有业务逻辑和变量名，除非用户明确要求改动。
+
+只返回如下 JSON（不要 Markdown 代码围栏、不要解释）：
+{"blocks":[{"id":"积木 ID","title":"标题","code":"完整的新内容"}]}
+
+要求：
+1. 每个被选中的积木都必须出现在 blocks 数组中。
+2. id 必须使用下面提供的原始 ID，不能修改。
+3. code 必须是该积木修改后的完整内容，不能只返回片段。
+4. 自然语言积木的 code 保存的是自然语言功能描述，请保持这种形式。
+5. 不要返回未选中的积木。`,
+    },
+    {
+      role: "user",
+      content: `页面：${page.title}
+用户修改要求：
+${instruction.trim() || "请优化选中积木的代码"}
+
+被选中的积木：
+${blocks}`,
+    },
+  ];
+}
+
+export async function generateSelectedBlockUpdates(
+  page: Page,
+  blockIds: string[],
+  config: AiConfig,
+  instruction: string,
+): Promise<ScriptBlockUpdate[]> {
+  const result = await chatCompletion(
+    config,
+    buildSelectedBlockMessages(page, blockIds, instruction),
+    {
+      temperature: Math.min(config.temperature, 0.5),
+      maxTokens: config.maxTokens,
+    },
+  );
+  const text = extractMessageText(result.message).trim();
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced?.[1] ?? text;
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+  if (start < 0 || end <= start) {
+    throw new Error("AI 没有返回可解析的积木修改结果");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(candidate.slice(start, end + 1));
+  } catch (error) {
+    throw new Error(
+      `AI 返回的 JSON 无法解析：${error instanceof Error ? error.message : "格式错误"}`,
+    );
+  }
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    !Array.isArray((parsed as { blocks?: unknown }).blocks)
+  ) {
+    throw new Error("AI 返回的积木结果格式不正确");
+  }
+  const selectedIds = new Set(blockIds);
+  const updates = ((parsed as { blocks: unknown[] }).blocks ?? [])
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+      const record = item as Record<string, unknown>;
+      if (
+        typeof record.id !== "string" ||
+        !selectedIds.has(record.id) ||
+        typeof record.code !== "string"
+      ) {
+        return null;
+      }
+      return {
+        id: record.id,
+        code: record.code,
+        ...(typeof record.title === "string"
+          ? { title: record.title }
+          : {}),
+      };
+    })
+    .filter((update): update is ScriptBlockUpdate => Boolean(update));
+  if (updates.length === 0) {
+    throw new Error("AI 没有返回任何选中的积木");
+  }
+  return updates;
+}
