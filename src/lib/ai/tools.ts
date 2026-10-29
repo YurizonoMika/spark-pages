@@ -324,7 +324,7 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
     function: {
       name: "get_script_board",
       description:
-        "读取当前页面的脚本画板：积木 ID、类型、标题、代码以及连线。修改积木前使用。",
+        "读取当前页面的脚本画板：积木 ID、类型、标题、代码、可视化字段以及连线。修改积木前使用。",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -333,7 +333,7 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
     function: {
       name: "update_script_blocks",
       description:
-        "批量修改脚本画板积木的代码和标题。每个 code 必须是完整的新内容；只能修改传入的积木，不能修改未选中的积木。",
+        "批量修改脚本画板积木。积木有可视化字段时优先传 fields（只需传要改的字段，保持结构化编辑）；也可以传完整 code 替换整个积木，此时该积木会变成只读代码积木。code 和 fields 至少提供一个。只能修改传入的积木，不能修改未选中的积木。",
       parameters: {
         type: "object",
         properties: {
@@ -344,9 +344,15 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
               properties: {
                 id: { type: "string", description: "积木 ID" },
                 title: { type: "string", description: "积木标题，可省略" },
-                code: { type: "string", description: "完整的新内容" },
+                code: { type: "string", description: "完整的新代码，可省略" },
+                fields: {
+                  type: "object",
+                  description:
+                    "可视化字段的键值对，只需传要修改的字段；没有传的字段保持不变",
+                  additionalProperties: { type: "string" },
+                },
               },
-              required: ["id", "code"],
+              required: ["id"],
             },
           },
         },
@@ -1071,6 +1077,7 @@ export function executeAgentTool(
             kind: block.kind,
             title: block.title,
             code: block.code,
+            ...(block.fields ? { fields: block.fields } : {}),
             x: block.x,
             y: block.y,
           })),
@@ -1086,6 +1093,9 @@ export function executeAgentTool(
       }
       const board = page.scriptBoard ?? { blocks: [], connections: [] };
       const boardIds = new Set(board.blocks.map((block) => block.id));
+      const blocksById = new Map(
+        board.blocks.map((block) => [block.id, block]),
+      );
       const selection = new Set(state.scriptSelection);
       const updates = raw.map((item) => {
         const record = objectArg(item);
@@ -1096,15 +1106,26 @@ export function executeAgentTool(
         if (selection.size > 0 && !selection.has(id)) {
           throw new Error(`只能修改魔杖选中的积木: ${id}`);
         }
+        let fields: Record<string, string> | undefined;
+        if (record.fields !== undefined) {
+          const patch = objectArg(record.fields);
+          fields = { ...(blocksById.get(id)?.fields ?? {}) };
+          for (const [key, value] of Object.entries(patch)) {
+            if (typeof value !== "string") {
+              throw new Error(`字段 ${key} 必须是字符串: ${id}`);
+            }
+            fields[key] = value;
+          }
+        }
         const code =
-          typeof record.code === "string"
-            ? record.code
-            : (() => {
-                throw new Error(`缺少积木内容: ${id}`);
-              })();
+          typeof record.code === "string" ? record.code : undefined;
+        if (code === undefined && !fields) {
+          throw new Error(`缺少积木内容: ${id}`);
+        }
         return {
           id,
-          code,
+          ...(code !== undefined ? { code } : {}),
+          ...(fields ? { fields } : {}),
           ...(typeof record.title === "string"
             ? { title: record.title }
             : {}),

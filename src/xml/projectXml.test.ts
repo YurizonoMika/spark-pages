@@ -63,6 +63,11 @@ describe("project XML", () => {
           kind: "event",
           title: "点击按钮",
           code: 'document.getElementById("cta").addEventListener("click", () => {\n  console.log("hi");\n});',
+          fields: {
+            selector: "cta",
+            event: "click",
+            note: 'console.log("hi");',
+          },
           x: 80,
           y: 120,
           width: 260,

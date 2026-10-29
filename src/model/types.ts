@@ -62,6 +62,7 @@ export interface ScriptBlock {
   kind: ScriptBlockKind;
   title: string;
   code: string;
+  fields?: Record<string, string>;
   x: number;
   y: number;
   width: number;

@@ -33,7 +33,9 @@ ${block.code}`;
 代码草稿：
 \`\`\`js
 ${block.code}
-\`\`\``;
+\`\`\`${block.fields ? `\n可视化字段：\n${Object.entries(block.fields)
+        .map(([key, value]) => `- ${key}: ${JSON.stringify(value)}`)
+        .join("\n")}` : ""}`;
     })
     .join("\n\n");
   const connectionLines = connections

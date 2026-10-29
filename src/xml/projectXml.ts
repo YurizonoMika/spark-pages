@@ -235,11 +235,25 @@ function parseScriptBoard(
         return null;
       }
       const codeElement = directChildren(block, "code")[0];
+      const fieldsElement = directChildren(block, "fields")[0];
+      const fields = fieldsElement
+        ? directChildren(fieldsElement, "field").reduce<Record<string, string>>(
+            (result, field) => {
+              const key = readAttr(field, "key")?.trim();
+              if (key) {
+                result[key] = field.textContent ?? "";
+              }
+              return result;
+            },
+            {},
+          )
+        : undefined;
       return {
         id,
         kind: (readAttr(block, "kind") ?? "custom") as ScriptBlockKind,
         title: readAttr(block, "title") ?? "积木",
         code: codeElement?.textContent ?? "",
+        ...(fields && Object.keys(fields).length > 0 ? { fields } : {}),
         x: numberAttr(block, "x", "脚本积木", 0),
         y: numberAttr(block, "y", "脚本积木", 0),
         width: Math.max(numberAttr(block, "width", "脚本积木", 260), 120),
@@ -584,6 +598,15 @@ function serializeScriptBoard(
       `${pad}  <block${attr("id", block.id)}${attr("kind", block.kind)}${attr("title", block.title)}${attr("x", block.x)}${attr("y", block.y)}${attr("width", block.width)}${attr("height", block.height)}>`,
     );
     lines.push(`${pad}    <code>${wrapCdata(block.code)}</code>`);
+    if (block.fields && Object.keys(block.fields).length > 0) {
+      lines.push(`${pad}    <fields>`);
+      for (const [key, value] of Object.entries(block.fields)) {
+        lines.push(
+          `${pad}      <field${attr("key", key)}>${wrapCdata(value)}</field>`,
+        );
+      }
+      lines.push(`${pad}    </fields>`);
+    }
     lines.push(`${pad}  </block>`);
   }
   for (const connection of board.connections) {

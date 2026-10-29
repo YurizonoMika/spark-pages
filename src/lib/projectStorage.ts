@@ -90,6 +90,7 @@ const scriptBlockSchema = z.object({
   ]),
   title: z.string().default("积木"),
   code: z.string().default(""),
+  fields: z.record(z.string(), z.string()).optional(),
   x: z.number(),
   y: z.number(),
   width: z.number().positive().default(260),

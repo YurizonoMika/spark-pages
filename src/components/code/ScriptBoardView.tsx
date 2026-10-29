@@ -20,7 +20,12 @@ import type {
   ScriptBlock,
   ScriptBlockKind,
 } from "../../model/types";
-import { scriptBlockTemplate } from "../../model/scriptBoard";
+import {
+  defaultScriptBlockFields,
+  scriptBlockCode,
+  scriptBlockFields,
+  scriptBlockTemplate,
+} from "../../model/scriptBoard";
 import {
   selectActivePage,
   useEditorStore,
@@ -59,6 +64,9 @@ export function ScriptBoardView({ page }: { page: Page }) {
     (state) => state.updateScriptBlockTransient,
   );
   const addScriptBlock = useEditorStore((state) => state.addScriptBlock);
+  const updateScriptBlock = useEditorStore(
+    (state) => state.updateScriptBlock,
+  );
   const scriptSelection = useEditorStore((state) => state.scriptSelection);
   const toggleScriptSelection = useEditorStore(
     (state) => state.toggleScriptSelection,
@@ -159,6 +167,52 @@ export function ScriptBoardView({ page }: { page: Page }) {
     setPendingFrom((current) => (current === id ? null : id));
   };
 
+  const fieldsPatch = (
+    block: ScriptBlock,
+    key: string,
+    value: string,
+  ) => {
+    const fields = {
+      ...(block.fields ?? defaultScriptBlockFields(block.kind)),
+      [key]: value,
+    };
+    return {
+      fields,
+      code: scriptBlockCode(block.kind, fields),
+    };
+  };
+
+  const updateFields = (
+    block: ScriptBlock,
+    key: string,
+    value: string,
+  ) => {
+    updateScriptBlock(block.id, fieldsPatch(block, key, value));
+  };
+
+  const updateFieldsTransient = (
+    block: ScriptBlock,
+    key: string,
+    value: string,
+  ) => {
+    updateScriptBlockTransient(block.id, fieldsPatch(block, key, value));
+  };
+
+  const convertToVisual = (block: ScriptBlock) => {
+    if (
+      !window.confirm(
+        "转换为可视化字段后，旧代码将被字段内容替换。继续吗？",
+      )
+    ) {
+      return;
+    }
+    const fields = defaultScriptBlockFields(block.kind);
+    updateScriptBlock(block.id, {
+      fields,
+      code: scriptBlockCode(block.kind, fields),
+    });
+  };
+
   const handleHead = (id: string) => {
     if (!pendingFrom) {
       return;
@@ -194,8 +248,8 @@ export function ScriptBoardView({ page }: { page: Page }) {
     }
     addScriptBlock(
       kind,
-      Math.max(0, Math.round(event.clientX - rect.left + origin.x - 130)),
-      Math.max(0, Math.round(event.clientY - rect.top + origin.y - 84)),
+      Math.max(0, Math.round(event.clientX - rect.left + origin.x - 140)),
+      Math.max(0, Math.round(event.clientY - rect.top + origin.y - 120)),
     );
   };
 
@@ -598,26 +652,97 @@ export function ScriptBoardView({ page }: { page: Page }) {
                     <X size={11} />
                   </button>
                 </div>
-                <textarea
-                  className="script-block-code"
-                  spellCheck={false}
-                  readOnly={wandActive}
-                  placeholder={
-                    block.kind === "natural"
-                      ? "用自然语言描述这段代码要实现的功能…"
-                      : undefined
-                  }
-                  value={block.code}
-                  onFocus={beginTransaction}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={(event) => event.stopPropagation()}
-                  onChange={(event) =>
-                    updateScriptBlockTransient(block.id, {
-                      code: event.target.value,
-                    })
-                  }
-                  onBlur={endTransaction}
-                />
+                {block.fields ? (
+                  <div
+                    className="script-block-fields"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {scriptBlockFields(block.kind).map((field) => {
+                      const value = block.fields?.[field.key] ?? "";
+                      return (
+                        <label key={field.key} className="script-block-field">
+                          <span>{field.label}</span>
+                          {field.kind === "select" ? (
+                            <select
+                              value={value}
+                              disabled={wandActive}
+                              onChange={(event) =>
+                                updateFields(
+                                  block,
+                                  field.key,
+                                  event.target.value,
+                                )
+                              }
+                            >
+                              {(field.options ?? []).map((option) => (
+                                <option key={option} value={option}>
+                                  {option}
+                                </option>
+                              ))}
+                            </select>
+                          ) : field.kind === "textarea" ? (
+                            <textarea
+                              rows={2}
+                              spellCheck={false}
+                              value={value}
+                              placeholder={field.placeholder}
+                              readOnly={wandActive}
+                              onFocus={beginTransaction}
+                              onPointerDown={(event) => event.stopPropagation()}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={(event) =>
+                                updateFieldsTransient(
+                                  block,
+                                  field.key,
+                                  event.target.value,
+                                )
+                              }
+                              onBlur={endTransaction}
+                            />
+                          ) : (
+                            <input
+                              type={
+                                field.kind === "number" ? "number" : "text"
+                              }
+                              spellCheck={false}
+                              value={value}
+                              placeholder={field.placeholder}
+                              readOnly={wandActive}
+                              onFocus={beginTransaction}
+                              onPointerDown={(event) => event.stopPropagation()}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={(event) =>
+                                updateFieldsTransient(
+                                  block,
+                                  field.key,
+                                  event.target.value,
+                                )
+                              }
+                              onBlur={endTransaction}
+                            />
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div
+                    className="script-block-legacy"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <pre>{block.code}</pre>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      disabled={wandActive}
+                      onClick={() => convertToVisual(block)}
+                    >
+                      转为可视化编辑
+                    </button>
+                  </div>
+                )}
                 <button
                   type="button"
                   className="script-port is-tail"

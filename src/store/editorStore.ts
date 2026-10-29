@@ -61,6 +61,7 @@ import {
   createScriptBlock,
   createScriptConnection,
   emptyScriptBoard,
+  scriptBlockCode,
 } from "../model/scriptBoard";
 
 const HISTORY_LIMIT = 100;
@@ -314,17 +315,28 @@ export interface EditorState {
   updateScriptBlock: (
     id: string,
     patch: Partial<
-      Pick<ScriptBlock, "title" | "code" | "x" | "y" | "width" | "height">
+      Pick<
+        ScriptBlock,
+        "title" | "code" | "fields" | "x" | "y" | "width" | "height"
+      >
     >,
   ) => void;
   updateScriptBlockTransient: (
     id: string,
     patch: Partial<
-      Pick<ScriptBlock, "title" | "code" | "x" | "y" | "width" | "height">
+      Pick<
+        ScriptBlock,
+        "title" | "code" | "fields" | "x" | "y" | "width" | "height"
+      >
     >,
   ) => void;
   updateScriptBlocks: (
-    updates: Array<{ id: string; title?: string; code: string }>,
+    updates: Array<{
+      id: string;
+      title?: string;
+      code?: string;
+      fields?: Record<string, string>;
+    }>,
   ) => void;
   removeScriptBlock: (id: string) => void;
   connectScriptBlocks: (from: string, to: string) => boolean;
@@ -1703,7 +1715,19 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       for (const update of updates) {
         const block = byId.get(update.id);
         if (block) {
-          block.code = update.code;
+          if (update.fields) {
+            block.fields = update.fields;
+            block.code =
+              update.code ?? scriptBlockCode(block.kind, update.fields);
+          } else if (update.code !== undefined) {
+            block.code = update.code;
+            if (
+              block.fields &&
+              scriptBlockCode(block.kind, block.fields) !== update.code
+            ) {
+              delete block.fields;
+            }
+          }
           if (update.title !== undefined) {
             block.title = update.title;
           }

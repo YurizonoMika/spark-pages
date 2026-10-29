@@ -146,7 +146,7 @@ ${catalog}
 8. 动画编辑：使用 set_preset_animation 设置出场/循环/离场，使用 set_animation_timing 设置时长和循环，使用 add_animation_track、add_animation_keyframe、update_animation_keyframe、remove_animation_keyframe 编辑关键帧。修改前先读取页面或模块以取得现有动画和 keyframeId。
 9. 动画分组与触发：一个页面/组件可以有多组独立动画。先用 create_animation_group 新建组并取得 groupId，再用该 groupId 调用 set_preset_animation / 关键帧工具 / set_animation_trigger。使用 set_animation_trigger 设置 click、hover、condition 或 custom 触发；condition 需要 sourceModuleId、sourceProperty（value/text/attribute）、operator（gt/eq/lt）和 value；custom 的 code 必须返回布尔值，可访问 element、modules、event。多组动画可以各自拥有时间轴和触发条件。
 10. 页面脚本：用户要求“写脚本 / 加交互 / 修改页面逻辑”时，使用 read_page_script 读取当前页面脚本，再使用 write_page_script 写入完整脚本。脚本保存在 XML 设计稿中并进入撤销历史；language 可选 javascript 或 typescript，默认保持当前语言。
-11. 脚本画板：用户用魔杖选中的积木会作为上下文附加到消息。使用 get_script_board 读取积木和连接，使用 update_script_blocks 批量修改积木的完整代码和标题；只修改用户要求的积木，自然语言积木更新的是功能描述，代码积木保留原有业务逻辑。
+11. 脚本画板：用户用魔杖选中的积木会作为上下文附加到消息。使用 get_script_board 读取积木、可视化字段和连接，使用 update_script_blocks 批量修改积木。积木带 fields 时优先用 fields 只传要改的字段，保持可视化编辑；只有用户明确要求完全重写时才传 code。只修改用户要求的积木，自然语言积木更新的是功能描述，代码积木保留原有业务逻辑。
 12. 当前标签是页面设计稿，只能读写这个设计稿（模块、页面设置、主题、动画、页面脚本、脚本画板）。不要读写项目里的 HTML/CSS/JS/TS/Vue 等代码文件；需要修改构建产物时，请提示用户切换到对应的文件标签页。
 13. 当前技能：${skill.label}。${skill.prompt}`;
 }
@@ -174,12 +174,16 @@ function buildUserContent(
     )
     .join("\n");
   const blockContext = blocks
-    .map(
-      (block) =>
-        `### ${block.id} · ${block.title}（${block.kind === "natural" ? "自然语言" : "代码"}）\n\`\`\`\n${block.code}\n\`\`\``,
-    )
+    .map((block) => {
+      const fields = block.fields
+        ? `\n可视化字段：\n${Object.entries(block.fields)
+            .map(([key, value]) => `- ${key}: ${JSON.stringify(value)}`)
+            .join("\n")}`
+        : "";
+      return `### ${block.id} · ${block.title}（${block.kind === "natural" ? "自然语言" : "代码"}）\n代码草稿：\n\`\`\`\n${block.code}\n\`\`\`${fields}`;
+    })
     .join("\n\n");
-  return `${text}\n\n${selected.length > 0 ? `[当前魔杖选区]\n${selection}\n请优先针对这些模块修改，除非用户要求修改其他内容。\n\n` : ""}${blocks.length > 0 ? `[魔杖选中的脚本积木]\n${blockContext}\n请优先修改这些积木，除非用户明确要求修改其他积木。` : ""}`;
+  return `${text}\n\n${selected.length > 0 ? `[当前魔杖选区]\n${selection}\n请优先针对这些模块修改，除非用户要求修改其他内容。\n\n` : ""}${blocks.length > 0 ? `[魔杖选中的脚本积木]\n${blockContext}\n请优先修改这些积木，除非用户明确要求修改其他积木。带 fields 的积木请用 update_script_blocks 的 fields 参数修改。` : ""}`;
 }
 
 function toolsForSkill(skill: AgentSkill) {

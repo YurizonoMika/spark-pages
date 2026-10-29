@@ -270,6 +270,33 @@ describe("agent runtime", () => {
     expect(userMessage?.content).toContain('console.log("old");');
   });
 
+  it("updates visual script block fields through the board tool", () => {
+    useEditorStore.getState().addScriptBlock("event", 0, 0);
+    const block =
+      useEditorStore.getState().project.pages[0].scriptBoard?.blocks[0];
+    expect(block?.fields).toMatchObject({ selector: "element-id", event: "click" });
+
+    const result = executeAgentTool("update_script_blocks", {
+      blocks: [
+        {
+          id: block?.id,
+          fields: { selector: "primary", note: "打开菜单" },
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    const updated =
+      useEditorStore.getState().project.pages[0].scriptBoard?.blocks[0];
+    expect(updated?.fields).toMatchObject({
+      selector: "primary",
+      event: "click",
+      note: "打开菜单",
+    });
+    expect(updated?.code).toContain('getElementById("primary")');
+    expect(updated?.code).toContain("打开菜单");
+  });
+
   it("returns tool errors to the model instead of throwing", async () => {
     const mocked = vi.mocked(chatCompletion);
     mocked.mockResolvedValueOnce({
