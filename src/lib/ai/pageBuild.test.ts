@@ -73,6 +73,20 @@ describe("AI page build", () => {
     expect(user).not.toContain('id="page_other"');
   });
 
+  it("includes the complete page script in the build prompt", () => {
+    const project = defaultProject();
+    const page = project.pages[0];
+    page.customScript = 'document.getElementById("cta")?.focus();';
+    page.scriptLanguage = "javascript";
+
+    const messages = buildPageMessages(project, page, "", []);
+    const user = messages[1].content ?? "";
+
+    expect(user).toContain(page.customScript);
+    expect(user).toContain("页面脚本（必须完整保留");
+    expect(user).toContain("script.js");
+  });
+
   it("writes split page files through read/write tools", async () => {
     const mocked = vi.mocked(chatCompletion);
     const project = defaultProject();

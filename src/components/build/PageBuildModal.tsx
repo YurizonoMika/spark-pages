@@ -31,8 +31,10 @@ import {
 } from "../../lib/ai/pageBuild";
 import { listProjectFiles } from "../../lib/ai/build";
 import {
+  buildExistingFiles,
   pageCodeDirectory,
   pageSlug,
+  projectBuildRoot,
   projectTypeLabel,
 } from "../../lib/ai/projectContext";
 import { toast } from "../../store/toastStore";
@@ -173,17 +175,16 @@ function PageBuildModalInner() {
     setRunning(true);
     setStatus("正在读取项目文件和页面 XML…");
     try {
+      const buildRoot = projectBuildRoot(folder);
       const existing = await listProjectFiles(folder);
-      const existingFiles = existing
-        .filter((entry) => !entry.isDir)
-        .map((entry) => entry.path);
+      const existingFiles = buildExistingFiles(existing);
       const built = await buildPageWithAi(
         project,
         page,
         config,
         instruction,
         {
-          root: folder,
+          root: buildRoot,
           existingFiles,
           callbacks: {
             onStatus: (next) => setStatus(next),
@@ -194,11 +195,11 @@ function PageBuildModalInner() {
         },
       );
       setStatus("正在写入页面文件…");
-      await writePageFiles(folder, built.files);
+      await writePageFiles(buildRoot, built.files);
       bumpFilesVersion();
       setResult({
         ...built,
-        root: folder,
+        root: buildRoot,
         directory,
         preview: buildPagePreviewHtml(project, page, built.files),
       });
@@ -450,7 +451,7 @@ function PageBuildModalInner() {
               </button>
             </div>
             <p className="settings-hint">
-              AI 会先读取现有页面代码，再直接覆盖同名文件；构建结果会同步到左侧文件视图。
+              AI 会读取 build/ 中的现有页面代码；构建产物写入 {folder || "项目目录"}/build，并同步到左侧文件视图。
             </p>
           </div>
 

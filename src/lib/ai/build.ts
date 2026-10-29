@@ -55,13 +55,15 @@ const PAGE_REQUIREMENTS = `页面与视觉要求：
 3. 如果 XML 中存在 <animations>，使用 CSS/JS 实现出场、循环和离场动画，并保留 duration、delay、exit-delay、easing。
 4. 如果 XML 中存在 <keyframes>，按轨道实现关键帧动画，保留 duration、loop、时间点、值和缓动；x/y 使用 translate，scale 使用 scale，rotate 使用 rotate，opacity 使用 opacity，blur/brightness/saturate 使用 filter。
 5. anchor-x="right" / anchor-y="bottom" 表示相对页面右/下边缘定位，布局时保持这种参照关系。
-6. 如果页面包含 <custom-script>，必须整合到最终页面中；language="typescript" 时使用 TypeScript。
+6. 页面脚本必须完整保留并实际执行：不能省略、截断、改写成占位注释或只保留 TODO。
+   - HTML 项目：每个有脚本的页面写入 pages/<slug>/script.js，并在页面 HTML 中用 <script src="./script.js" defer></script> 引用；如果脚本语言是 TypeScript，需转写为行为等价的 JavaScript。
+   - Vue 项目：完整写入对应页面的 <script setup lang="ts"> 或同目录 logic.ts，并在组件中实际执行。
 7. 不要引用不存在的本地资源；图片可以使用占位图、CDN 或内联 SVG。
 8. 页面应当响应式、可访问、无控制台错误。`;
 
 function projectLayoutRules(project: Project): string {
   if (project.type === "vue") {
-    return `目标项目：Vue + TS（Vite + Vue 3 + TypeScript）。
+    return `目标项目：Vue + TS（Vite + Vue 3 + TypeScript）。所有生成文件都写入项目目录的 build/ 文件夹，以下路径均相对 build/。
 文件布局：
 - package.json：scripts.dev 必须为 vite；dependencies 包含 vue；devDependencies 包含 vite、@vitejs/plugin-vue、typescript、vue-tsc。
 - vite.config.ts、tsconfig.json、index.html、src/main.ts、src/App.vue。
@@ -72,9 +74,9 @@ function projectLayoutRules(project: Project): string {
 - 如需路由，使用 vue-router，并同时更新 package.json 和 src/router.ts、src/main.ts。
 - 页面 slug：${Array.from(pageSlugs(project).values()).join("、")}。`;
   }
-  return `目标项目：HTML + JS 静态项目。
+  return `目标项目：HTML + JS 静态项目。所有生成文件都写入项目目录的 build/ 文件夹，以下路径均相对 build/。
 文件布局：
-- 根目录 index.html 作为入口/导航页，链接到各个页面。
+- build/ 根目录 index.html 作为入口/导航页，链接到各个页面。
 - 每个页面写到 pages/<slug>/index.html，样式写到 pages/<slug>/style.css，脚本写到 pages/<slug>/script.js（按需）。
 - 可生成 assets/、公共 CSS/JS；所有引用使用相对路径。
 - 不引入框架或打包工具，直接由浏览器打开 index.html 即可浏览。
@@ -87,7 +89,7 @@ function systemPrompt(project: Project): string {
 工作方式：
 1. 先使用 read_project_file 读取需要修改的现有文件；首次构建可以跳过读取。
 2. 使用 write_project_file 写入或覆盖文件，一次回复可以调用多个工具写入多个文件。
-3. path 必须相对于项目根目录，使用正斜杠；禁止绝对路径和 ..。
+3. path 必须相对于构建目录 build/，使用正斜杠；禁止绝对路径和 ..。
 4. 每个文件必须写入完整、可运行的内容，不能使用“省略”“同上”或占位注释代替代码。
 5. 所有文件写完后调用 finish_project，summary 用一句中文概括结果。
 6. 不要只输出 JSON、Markdown 代码块或文字说明来代替文件写入。
@@ -102,10 +104,43 @@ function jsonSystemPrompt(project: Project): string {
 
 输出要求：
 1. 只输出一个 JSON 对象：{"summary":"一句话说明","files":[{"path":"...","content":"..."}]}
-2. path 相对于项目根目录，禁止绝对路径和 ..；文件内容必须完整可运行。
+2. path 相对于构建目录 build/，禁止绝对路径和 ..；文件内容必须完整可运行。
 3. ${project.type === "vue" ? "必须包含 package.json、index.html，并至少包含一个 .vue 页面文件；package.json 必须包含 scripts.dev。" : "必须包含根目录 index.html，并至少包含一个 HTML 页面文件。"}
 4. ${projectLayoutRules(project)}
 5. ${PAGE_REQUIREMENTS}`;
+}
+
+function pageScriptTarget(project: Project, slug: string): string {
+  if (project.type === "vue") {
+    return `${pageCodeDirectory(project, slug)}/index.vue 的 <script setup lang="ts">，或 ${pageCodeDirectory(project, slug)}/logic.ts`;
+  }
+  return `${pageCodeDirectory(project, slug)}/script.js`;
+}
+
+function pageScriptsPrompt(project: Project): string {
+  const slugs = pageSlugs(project);
+  const entries = project.pages
+    .filter((page) => page.customScript?.trim())
+    .map((page) => {
+      const slug = slugs.get(page.id) ?? page.id;
+      const language =
+        page.scriptLanguage === "typescript" ? "typescript" : "javascript";
+      const fence = language === "typescript" ? "ts" : "js";
+      const note =
+        project.type === "html" && language === "typescript"
+          ? "\n注意：HTML 项目不能直接运行 TypeScript，请转写为行为等价的 JavaScript 后写入 script.js。"
+          : "";
+      return `### 页面「${page.title}」（${slug}）· ${language}
+写入位置：${pageScriptTarget(project, slug)}${note}
+\`\`\`${fence}
+${page.customScript}
+\`\`\``;
+    });
+  if (entries.length === 0) {
+    return "页面脚本：所有页面均无自定义脚本。";
+  }
+  return `页面脚本（必须完整保留到构建产物，不能省略、截断或只留 TODO）：
+${entries.join("\n\n")}`;
 }
 
 function moduleCatalog(project: Project): string {
@@ -126,9 +161,9 @@ function moduleCatalog(project: Project): string {
 
 function existingFilesPrompt(files: string[]): string {
   if (files.length === 0) {
-    return "当前项目文件夹中没有现有代码文件。";
+    return "build/ 构建目录中还没有现有代码文件。";
   }
-  return `当前项目文件夹中已有文件（修改前建议先调用 read_project_file 读取）：
+  return `build/ 构建目录中已有文件（修改前建议先调用 read_project_file 读取）：
 ${files.slice(0, 220).map((path) => `- ${path}`).join("\n")}`;
 }
 
@@ -145,6 +180,8 @@ ${existingFilesPrompt(existingFiles)}
 
 使用到的模块说明：
 ${moduleCatalog(project) || "仅使用 XML 中出现的模块"}
+
+${pageScriptsPrompt(project)}
 
 用户额外的构建要求：
 ${instruction.trim() || "无，请按 XML 设计生成高质量项目"}
@@ -226,6 +263,35 @@ export function validateProjectFiles(
   }
   if (!files.some((file) => file.path.endsWith(".html"))) {
     throw new Error("AI 生成的 HTML 项目缺少 HTML 页面");
+  }
+  const slugs = pageSlugs(project);
+  for (const page of project.pages) {
+    if (!page.customScript?.trim()) {
+      continue;
+    }
+    if (page.scriptLanguage === "typescript") {
+      continue;
+    }
+    const directory = pageCodeDirectory(
+      project,
+      slugs.get(page.id) ?? page.id,
+    );
+    const script = files.find(
+      (file) => file.path === `${directory}/script.js`,
+    );
+    if (!script || !script.content.trim()) {
+      throw new Error(
+        `页面「${page.title}」缺少完整页面脚本 ${directory}/script.js`,
+      );
+    }
+    const pageHtml = files.find(
+      (file) => file.path === `${directory}/index.html`,
+    );
+    if (!pageHtml || !pageHtml.content.includes("script.js")) {
+      throw new Error(
+        `页面「${page.title}」的 index.html 没有引用 ${directory}/script.js`,
+      );
+    }
   }
 }
 

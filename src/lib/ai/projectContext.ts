@@ -51,6 +51,23 @@ export function pageCodeDirectory(project: Project, slug: string): string {
   return project.type === "vue" ? `src/pages/${slug}` : `pages/${slug}`;
 }
 
+export const BUILD_DIRECTORY = "build";
+
+export function projectBuildRoot(folder: string): string {
+  return `${folder.replace(/[\\/]+$/, "")}/${BUILD_DIRECTORY}`;
+}
+
+export function buildExistingFiles(
+  entries: Array<{ path: string; isDir: boolean }>,
+): string[] {
+  const prefix = `${BUILD_DIRECTORY}/`;
+  return entries
+    .filter((entry) => !entry.isDir)
+    .map((entry) => entry.path.replaceAll("\\", "/"))
+    .filter((path) => path.startsWith(prefix))
+    .map((path) => path.slice(prefix.length));
+}
+
 export function pageXmlPath(project: Project, page: Page): string {
   return `${pageCodeDirectory(project, pageSlug(project, page))}/page.spark`;
 }

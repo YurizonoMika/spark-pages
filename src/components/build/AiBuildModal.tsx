@@ -26,6 +26,8 @@ import {
   type BuildResult,
 } from "../../lib/ai/build";
 import {
+  buildExistingFiles,
+  projectBuildRoot,
   projectTemplateLabel,
   projectTypeLabel,
 } from "../../lib/ai/projectContext";
@@ -151,15 +153,14 @@ function AiBuildModalInner() {
     setRunning(true);
     try {
       setStatus("正在读取项目文件夹和页面 XML…");
+      const buildRoot = projectBuildRoot(folder);
       const existing = await listProjectFiles(folder);
-      const existingFiles = existing
-        .filter((entry) => !entry.isDir)
-        .map((entry) => entry.path);
+      const existingFiles = buildExistingFiles(existing);
       const generated = await generateProjectFiles(
         project,
         config,
         instruction,
-        folder,
+        buildRoot,
         existingFiles,
         {
           onStatus: (next) => setStatus(next),
@@ -169,9 +170,9 @@ function AiBuildModalInner() {
         },
       );
       setStatus("正在写入项目文件…");
-      await writeBuildFiles(folder, generated.files);
+      await writeBuildFiles(buildRoot, generated.files);
       bumpFilesVersion();
-      setResult({ ...generated, root: folder });
+      setResult({ ...generated, root: buildRoot });
       setStatus("构建完成");
       toast("AI 项目构建完成", "success");
     } catch (buildError) {
@@ -274,7 +275,7 @@ function AiBuildModalInner() {
           </div>
 
           <div className="build-root">
-            <span>项目目录</span>
+            <span>构建产物目录</span>
             <code>{result.root}</code>
           </div>
 
@@ -396,7 +397,7 @@ function AiBuildModalInner() {
               </button>
             </div>
             <p className="settings-hint">
-              AI 会读取此文件夹中的现有代码，并直接覆盖同名文件。左侧文件视图可查看构建结果。
+              AI 会读取此文件夹 build/ 中的现有代码。构建产物统一写入 {folder || "项目目录"}/build，左侧文件视图可查看结果。
             </p>
           </div>
 

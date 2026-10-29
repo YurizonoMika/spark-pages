@@ -13,6 +13,7 @@ import type { Project } from "../../model/types";
 import type { ChatToolTrace } from "../../store/aiChatStore";
 import { chatCompletion } from "./client";
 import {
+  buildProjectMessages,
   generateProjectFiles,
   parseGeneratedProject,
   validateProjectFiles,
@@ -135,6 +136,64 @@ describe("AI project output", () => {
         ]),
       ),
     ).toThrow(/不安全/);
+  });
+
+  it("includes the complete page script in the project build prompt", () => {
+    const project = htmlProject();
+    const page = project.pages[0];
+    page.customScript =
+      'const hero = document.getElementById("hero-title");\nhero?.addEventListener("click", () => console.log("clicked"));';
+    page.scriptLanguage = "javascript";
+
+    const messages = buildProjectMessages(project, "", []);
+    const user = messages[1].content ?? "";
+
+    expect(user).toContain(page.customScript);
+    expect(user).toContain("页面脚本（必须完整保留");
+    expect(user).toContain("script.js");
+    expect(messages[0].content).toContain("构建目录 build/");
+  });
+
+  it("requires page scripts to be attached to HTML builds", () => {
+    const project = htmlProject();
+    const page = project.pages[0];
+    page.customScript = 'console.log("page script");';
+    page.scriptLanguage = "javascript";
+    const base = [
+      { path: "index.html", content: "<html></html>" },
+      {
+        path: "pages/首页/index.html",
+        content: "<html><body></body></html>",
+      },
+    ];
+
+    expect(() => validateProjectFiles(project, base)).toThrow(/script\.js/);
+    expect(() =>
+      validateProjectFiles(project, [
+        ...base,
+        {
+          path: "pages/首页/script.js",
+          content: page.customScript ?? "",
+        },
+      ]),
+    ).toThrow(/没有引用/);
+    expect(() =>
+      validateProjectFiles(project, [
+        {
+          path: "index.html",
+          content: "<html></html>",
+        },
+        {
+          path: "pages/首页/index.html",
+          content:
+            '<html><body><script src="./script.js" defer></script></body></html>',
+        },
+        {
+          path: "pages/首页/script.js",
+          content: page.customScript ?? "",
+        },
+      ]),
+    ).not.toThrow();
   });
 
   it("requires a root index.html", () => {

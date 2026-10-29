@@ -108,6 +108,7 @@ function pageFileRules(project: Project, directory: string): string {
 - 必须写入 ${directory}/index.vue，使用 <script setup lang="ts">。
 - 可将样式拆分到 ${directory}/style.css，并在 SFC 中 import "./style.css"。
 - 可将复杂逻辑拆分到 ${directory}/logic.ts，并在 SFC 中导入；复杂渲染组件可使用 .tsx，并确保项目已配置 @vitejs/plugin-vue-jsx。
+- 如页面有自定义脚本，必须完整写入 index.vue 的 <script setup lang="ts"> 或同目录 logic.ts，并在组件中实际执行；不能省略、截断或只留 TODO。
 - 必须额外写入 ${directory}/preview.html：一个静态、可独立打开的 HTML 预览，内联 CSS/JS，展示该页面构建后的最终外观；它只用于应用内构建产物预览，不参与 Vue 运行时代码。
 - 只允许写入 ${directory}/ 下的文件；不要修改其他页面或共享代码，除非页面必须引用已有共享组件。
 - 页面应作为 Vue 组件可被现有路由或 App.vue 直接使用。`;
@@ -116,6 +117,7 @@ function pageFileRules(project: Project, directory: string): string {
 文件要求：
 - 必须写入 ${directory}/index.html。
 - 样式写入 ${directory}/style.css，脚本写入 ${directory}/script.js（如需要）。
+- 如页面有自定义脚本，必须完整写入 script.js 并在 index.html 中通过 <script src="./script.js" defer></script> 引用；不能省略、截断或只留 TODO。TypeScript 脚本需转写为行为等价的 JavaScript。
 - index.html 通过相对路径引用 ./style.css 和 ./script.js。
 - 只允许写入 ${directory}/ 下的文件。
 - 页面应能直接由浏览器打开，并保持响应式；可以引用同目录 assets/ 资源。`;
@@ -140,7 +142,7 @@ ${pageFileRules(project, directory)}
 页面与视觉要求：
 1. 保留 XML 中所有文案、模块内容、视觉层级、主题色、字体感觉、圆角、间距和页面尺寸意图。
 2. 不要机械复刻 XML 的绝对坐标；使用响应式/流式布局，同时保持设计意图。
-3. 实现 XML 中的 animations、keyframes、anchor-x/anchor-y 和 custom-script；TypeScript 脚本使用 .ts。
+3. 实现 XML 中的 animations、keyframes、anchor-x/anchor-y 和 custom-script。页面脚本必须完整保留并实际执行，不能省略、截断或只留 TODO；HTML 项目写入 script.js（TypeScript 转写为等价 JavaScript），Vue 项目写入 <script setup lang="ts"> 或 logic.ts。
 4. 页面应当响应式、可访问、无控制台错误，不要引用不存在的本地资源。
 5. 当前页面 slug 为 ${slug}，项目类型是 ${projectTypeLabel(project)}。`;
 }
@@ -171,6 +173,34 @@ function moduleCatalog(page: Page): string {
     .join("\n");
 }
 
+function pageScriptPrompt(
+  project: Project,
+  page: Page,
+  directory: string,
+): string {
+  const code = page.customScript?.trim();
+  if (!code) {
+    return "页面脚本：当前页面没有自定义脚本。";
+  }
+  const language =
+    page.scriptLanguage === "typescript" ? "typescript" : "javascript";
+  const fence = language === "typescript" ? "ts" : "js";
+  const target =
+    project.type === "vue"
+      ? `${directory}/index.vue 的 <script setup lang="ts">，或 ${directory}/logic.ts`
+      : `${directory}/script.js`;
+  const note =
+    project.type === "html" && language === "typescript"
+      ? "\n注意：HTML 项目不能直接运行 TypeScript，请转写为行为等价的 JavaScript 后写入 script.js。"
+      : "";
+  return `页面脚本（必须完整保留到构建产物，不能省略、截断或只留 TODO）：
+语言：${language}
+写入位置：${target}${note}
+\`\`\`${fence}
+${page.customScript}
+\`\`\``;
+}
+
 function existingFilesPrompt(files: string[]): string {
   if (files.length === 0) {
     return "当前页面还没有代码文件。";
@@ -195,6 +225,8 @@ ${existingFilesPrompt(existingFiles)}
 
 使用到的模块说明：
 ${moduleCatalog(page) || "无"}
+
+${pageScriptPrompt(project, page, directory)}
 
 用户额外的构建要求：
 ${instruction.trim() || "无，请按页面 XML 设计生成高质量页面"}
@@ -242,6 +274,37 @@ function validatePageFiles(
     }
     if (!files.some((file) => file.path === `${directory}/preview.html`)) {
       throw new Error(`Vue 页面构建缺少构建产物预览 ${directory}/preview.html`);
+    }
+    if (page.customScript?.trim()) {
+      const sfc = files.find((file) => file.path === `${directory}/index.vue`);
+      const hasInlineScript = Boolean(
+        sfc && /<script[\s>]/i.test(sfc.content),
+      );
+      const hasLogicFile = files.some(
+        (file) => file.path === `${directory}/logic.ts`,
+      );
+      if (!hasInlineScript && !hasLogicFile) {
+        throw new Error(
+          `Vue 页面缺少完整页面脚本（${directory}/index.vue 的 <script setup> 或 logic.ts）`,
+        );
+      }
+    }
+    return;
+  }
+  if (page.customScript?.trim() && page.scriptLanguage !== "typescript") {
+    const script = files.find(
+      (file) => file.path === `${directory}/script.js`,
+    );
+    if (!script || !script.content.trim()) {
+      throw new Error(`页面构建缺少完整页面脚本 ${directory}/script.js`);
+    }
+    const pageHtml = files.find(
+      (file) => file.path === `${directory}/index.html`,
+    );
+    if (!pageHtml || !pageHtml.content.includes("script.js")) {
+      throw new Error(
+        `页面构建的 index.html 没有引用 ${directory}/script.js`,
+      );
     }
   }
 }
@@ -437,7 +500,24 @@ function fallbackFiles(
   if (project.type === "vue") {
     return [{ path: `${directory}/index.vue`, content: extractVueSfc(text) }];
   }
-  return [{ path: `${directory}/index.html`, content: extractHtmlDocument(text) }];
+  const html = extractHtmlDocument(text);
+  const files: BuiltPageFile[] = [
+    { path: `${directory}/index.html`, content: html },
+  ];
+  if (page.customScript?.trim() && page.scriptLanguage !== "typescript") {
+    const referenced = /<script[^>]+src=["'][^"']*script\.js["']/i.test(html);
+    files[0].content = referenced
+      ? html
+      : html.replace(
+          /<\/body>/i,
+          `  <script src="./script.js" defer></script>\n</body>`,
+        );
+    files.push({
+      path: `${directory}/script.js`,
+      content: page.customScript,
+    });
+  }
+  return files;
 }
 
 function isToolCallingUnsupported(error: unknown): boolean {
