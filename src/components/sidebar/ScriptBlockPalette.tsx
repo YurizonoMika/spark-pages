@@ -6,6 +6,7 @@ import {
   GitBranch,
   MessageSquare,
   MousePointerClick,
+  Sparkles,
   Play,
   Repeat,
   Terminal,
@@ -16,6 +17,7 @@ import { SCRIPT_BLOCK_TEMPLATES } from "../../model/scriptBoard";
 import { useEditorStore } from "../../store/editorStore";
 
 const ICONS: Record<ScriptBlockKind, typeof Play> = {
+  natural: Sparkles,
   start: Play,
   event: MousePointerClick,
   variable: Variable,
@@ -47,7 +49,14 @@ export function ScriptBlockPalette() {
         点击积木添加到画板。点击积木尾部端点，再点击另一个积木头部端点即可连线。
       </p>
       {Object.entries(groups).map(([category, templates]) => (
-        <section key={category} className="palette-group">
+        <section
+          key={category}
+          className={
+            category === "入口"
+              ? "palette-group script-block-entry"
+              : "palette-group"
+          }
+        >
           <h3>{category}</h3>
           <div className="palette-grid">
             {templates.map((template) => {

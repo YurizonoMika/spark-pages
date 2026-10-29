@@ -9,6 +9,16 @@ describe("script board AI prompt", () => {
     page.scriptBoard = {
       blocks: [
         {
+          id: "natural",
+          kind: "natural",
+          title: "需求",
+          code: "点击按钮后显示一段提示文字。",
+          x: 0,
+          y: 0,
+          width: 260,
+          height: 168,
+        },
+        {
           id: "a",
           kind: "event",
           title: "点击",
@@ -38,6 +48,8 @@ describe("script board AI prompt", () => {
     expect(user).toContain("点击");
     expect(user).toContain('console.log("ok");');
     expect(user).toContain("点击 → 日志");
+    expect(user).toContain("自然语言说明");
+    expect(user).toContain("点击按钮后显示一段提示文字。");
     expect(user).toContain("保留变量名");
   });
 });

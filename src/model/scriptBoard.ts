@@ -16,6 +16,13 @@ export interface ScriptBlockTemplate {
 
 export const SCRIPT_BLOCK_TEMPLATES: ScriptBlockTemplate[] = [
   {
+    kind: "natural",
+    label: "自然语言",
+    category: "入口",
+    description: "用自然语言描述代码功能",
+    code: "这段脚本需要实现：\n",
+  },
+  {
     kind: "start",
     label: "开始",
     category: "流程",

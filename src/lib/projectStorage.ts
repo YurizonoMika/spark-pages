@@ -75,6 +75,7 @@ const moduleSchema = z.object({
 const scriptBlockSchema = z.object({
   id: z.string().min(1),
   kind: z.enum([
+    "natural",
     "start",
     "event",
     "variable",

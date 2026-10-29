@@ -5473,6 +5473,19 @@ body.is-resizing-sidebars * {
   color: var(--md-on-surface);
 }
 
+.script-block.is-natural {
+  border-color: var(--md-primary);
+  box-shadow: inset 3px 0 0 var(--md-primary), var(--elev-2);
+}
+
+.script-block.is-natural .script-block-code {
+  background: var(--md-surface-lowest);
+}
+
+.script-block-entry .palette-card {
+  border: 1px solid var(--md-primary);
+}
+
 .script-block.is-pending-source {
   border-color: var(--md-primary);
   box-shadow:

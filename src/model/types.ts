@@ -44,6 +44,7 @@ export interface AnimationGroup {
 export type ScriptView = "board" | "code";
 
 export type ScriptBlockKind =
+  | "natural"
   | "start"
   | "event"
   | "variable"

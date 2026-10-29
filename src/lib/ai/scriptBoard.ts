@@ -23,6 +23,11 @@ export function buildScriptBoardMessages(
   const blockLines = blocks
     .map((block) => {
       const template = scriptBlockTemplate(block.kind);
+      if (block.kind === "natural") {
+        return `### 自然语言说明 ${block.id} · ${block.title}
+功能描述：
+${block.code}`;
+      }
       return `### 积木 ${block.id} · ${template.label}
 标题：${block.title}
 代码草稿：
@@ -52,11 +57,12 @@ ${block.code}
 
 要求：
 1. 严格按照积木之间的连接关系组织代码流程；没有连接的积木可以按合理顺序整理。
-2. 保留每个积木中的代码意图、变量名和业务逻辑，不要省略或只写 TODO。
-3. 将同一流程中的积木合并为完整、可运行的代码；需要时使用 DOMContentLoaded 或 IIFE 等待 DOM。
-4. 页面模块可以通过 document.getElementById("模块 ID") 访问，下面列出了可用 ID。
-5. 只输出完整的 JavaScript 代码，不要 Markdown 代码围栏、解释文字或省略号。
-6. 代码必须能在浏览器中直接运行，不要引用不存在的资源。`,
+2. 带有“自然语言说明”的积木是用户对代码功能的需求描述，必须转换成真实可运行的代码，不能原样保留为注释。
+3. 保留每个代码积木中的代码意图、变量名和业务逻辑，不要省略或只写 TODO。
+4. 将同一流程中的积木合并为完整、可运行的代码；需要时使用 DOMContentLoaded 或 IIFE 等待 DOM。
+5. 页面模块可以通过 document.getElementById("模块 ID") 访问，下面列出了可用 ID。
+6. 只输出完整的 JavaScript 代码，不要 Markdown 代码围栏、解释文字或省略号。
+7. 代码必须能在浏览器中直接运行，不要引用不存在的资源。`,
     },
     {
       role: "user",

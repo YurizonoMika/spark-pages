@@ -444,6 +444,11 @@ export function ScriptBoardView({ page }: { page: Page }) {
                 <textarea
                   className="script-block-code"
                   spellCheck={false}
+                  placeholder={
+                    block.kind === "natural"
+                      ? "用自然语言描述这段代码要实现的功能…"
+                      : undefined
+                  }
                   value={block.code}
                   onFocus={beginTransaction}
                   onPointerDown={(event) => event.stopPropagation()}
