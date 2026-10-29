@@ -269,9 +269,6 @@ export function validateProjectFiles(
     if (!page.customScript?.trim()) {
       continue;
     }
-    if (page.scriptLanguage === "typescript") {
-      continue;
-    }
     const directory = pageCodeDirectory(
       project,
       slugs.get(page.id) ?? page.id,

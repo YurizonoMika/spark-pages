@@ -176,6 +176,7 @@ src/
   styles.css     Material Design 3 主题与全部界面样式
 src-tauri/       Tauri 后端、文件命令、密钥存储、模型代理
 docs/screenshots README 截图
+build/           AI 构建产物（运行时生成，不进入版本库）
 ```
 
 ## 技术栈

@@ -291,7 +291,7 @@ function validatePageFiles(
     }
     return;
   }
-  if (page.customScript?.trim() && page.scriptLanguage !== "typescript") {
+  if (page.customScript?.trim()) {
     const script = files.find(
       (file) => file.path === `${directory}/script.js`,
     );
