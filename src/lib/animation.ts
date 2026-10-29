@@ -67,6 +67,7 @@ export function animationStyle(
 
 export interface WrapAnimationOptions {
   paused?: boolean;
+  group?: string;
 }
 
 export function wrapAnimatedHtml(
@@ -78,6 +79,7 @@ export function wrapAnimatedHtml(
     return html;
   }
   const paused = Boolean(options.paused);
+  const group = options.group;
   const styles = [
     animationStyle(config, "exit"),
     animationStyle(config, "loop"),
@@ -85,9 +87,12 @@ export function wrapAnimatedHtml(
   ].filter(Boolean);
   let result = html;
   for (const style of styles) {
+    const groupAttr = group
+      ? ` data-spark-anim-group="${htmlAttr(group)}"`
+      : "";
     const attributes = paused
-      ? ` data-spark-anim-style="${htmlAttr(style)}" style="${htmlAttr(`${style}animation-play-state:paused;`)}"`
-      : ` style="${htmlAttr(style)}"`;
+      ? `${groupAttr} data-spark-anim-style="${htmlAttr(style)}" style="${htmlAttr(`${style}animation-play-state:paused;`)}"`
+      : `${groupAttr} style="${htmlAttr(style)}"`;
     result = `<div class="spark-anim-layer"${attributes}>${result}</div>`;
   }
   return result;

@@ -2804,7 +2804,7 @@ svg {
 /* Animation dock */
 
 .app-shell.has-animation-dock {
-  grid-template-rows: 64px 38px minmax(0, 1fr) 300px 28px;
+  grid-template-rows: 64px 38px minmax(0, 1fr) 380px 28px;
 }
 
 .canvas-page-content {
@@ -5169,4 +5169,160 @@ body.is-resizing-sidebars * {
   background: var(--md-surface-highest);
   font-family: var(--font-mono);
   font-size: 9.5px;
+}
+
+
+/* Animation group manager */
+
+.animation-group-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--md-outline-variant);
+  background: var(--md-surface-container);
+}
+
+.animation-group-list {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.animation-group-list::-webkit-scrollbar {
+  display: none;
+}
+
+.animation-group-chip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  max-width: 180px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  background: var(--md-surface-lowest);
+  color: var(--md-on-surface-variant);
+  font-family: inherit;
+  font-size: 10px;
+}
+
+.animation-group-chip small {
+  color: var(--md-outline);
+  font-size: 8.5px;
+}
+
+.animation-group-chip.is-active {
+  border-color: var(--md-primary);
+  background: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+}
+
+.animation-group-chip.is-disabled {
+  opacity: 0.5;
+}
+
+.animation-group-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.animation-group-empty {
+  color: var(--md-on-surface-variant);
+  font-size: 10px;
+}
+
+.animation-group-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.animation-group-rename {
+  width: 118px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--radius-sm);
+  background: var(--md-surface-lowest);
+  color: var(--md-on-surface);
+  font-family: inherit;
+  font-size: 10px;
+}
+
+.animation-group-enabled {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--md-on-surface-variant);
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+
+.animation-group-enabled input {
+  accent-color: var(--md-primary);
+}
+
+.animation-trigger-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.animation-trigger-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 11px 12px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--radius-md);
+  background: var(--md-surface-container);
+}
+
+.animation-trigger-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--md-on-surface);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.animation-trigger-remove {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--md-on-surface-variant);
+  font-family: inherit;
+  font-size: 9px;
+}
+
+.animation-trigger-remove:hover {
+  background: var(--md-error-container);
+  color: var(--md-on-error-container);
+}
+
+.animation-trigger-add {
+  align-self: flex-start;
+}
+
+.animation-trigger-card .animation-trigger-condition {
+  padding: 0;
+  border: 0;
+  background: transparent;
 }

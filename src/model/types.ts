@@ -32,6 +32,15 @@ export interface AnimationTrigger {
   code?: string;
 }
 
+export interface AnimationGroup {
+  id: string;
+  name: string;
+  enabled: boolean;
+  animations?: AnimationConfig;
+  keyframes?: KeyframeAnimation;
+  triggers: AnimationTrigger[];
+}
+
 export type KeyframeProperty = string;
 export type AnchorX = "left" | "right";
 export type AnchorY = "top" | "bottom";
@@ -62,6 +71,7 @@ export interface ModuleNode {
   animations?: AnimationConfig;
   keyframes?: KeyframeAnimation;
   animationTrigger?: AnimationTrigger;
+  animationGroups?: AnimationGroup[];
 }
 
 export interface Page {
@@ -77,6 +87,7 @@ export interface Page {
   animations?: AnimationConfig;
   keyframes?: KeyframeAnimation;
   animationTrigger?: AnimationTrigger;
+  animationGroups?: AnimationGroup[];
 }
 
 export interface Theme {

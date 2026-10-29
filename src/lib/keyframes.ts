@@ -93,6 +93,7 @@ export interface BuiltKeyframeAnimation {
 
 export interface BuildKeyframeOptions {
   paused?: boolean;
+  group?: string;
 }
 
 export function buildKeyframeAnimation(
@@ -101,6 +102,7 @@ export function buildKeyframeAnimation(
   options: BuildKeyframeOptions = {},
 ): BuiltKeyframeAnimation {
   const paused = Boolean(options.paused);
+  const group = options.group;
   const cssRules: string[] = [];
   const wrappers = new Map<KeyframeProperty, string>();
   const cleanId = safeTargetId(targetId);
@@ -142,9 +144,12 @@ export function buildKeyframeAnimation(
     for (const property of order) {
       const style = wrappers.get(property);
       if (style) {
+        const groupAttr = group
+          ? ` data-spark-anim-group="${htmlAttr(group)}"`
+          : "";
         const attributes = paused
-          ? ` data-spark-anim-style="${htmlAttr(style)}" style="${htmlAttr(`${style}animation-play-state:paused;`)}"`
-          : ` style="${htmlAttr(style)}"`;
+          ? `${groupAttr} data-spark-anim-style="${htmlAttr(style)}" style="${htmlAttr(`${style}animation-play-state:paused;`)}"`
+          : `${groupAttr} style="${htmlAttr(style)}"`;
         result = `<div class="spark-kf-layer"${attributes}>${result}</div>`;
       }
     }

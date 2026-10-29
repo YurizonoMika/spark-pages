@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clapperboard,
+  Copy,
   Pause,
   Play,
   Plus,
@@ -24,6 +25,7 @@ import {
   EASING_OPTIONS,
   hasAnimations,
 } from "../../model/animations";
+import { animationGroupsOf } from "../../model/animationGroups";
 import {
   ANIMATABLE_PROPERTIES,
   DEFAULT_KEYFRAME_ANIMATION,
@@ -77,11 +79,26 @@ export function AnimationDock() {
   const setPageAnimations = useEditorStore(
     (state) => state.setPageAnimations,
   );
-  const setModuleAnimationTrigger = useEditorStore(
-    (state) => state.setModuleAnimationTrigger,
+  const setAnimationGroupTriggers = useEditorStore(
+    (state) => state.setAnimationGroupTriggers,
   );
-  const setPageAnimationTrigger = useEditorStore(
-    (state) => state.setPageAnimationTrigger,
+  const addAnimationGroup = useEditorStore(
+    (state) => state.addAnimationGroup,
+  );
+  const updateAnimationGroup = useEditorStore(
+    (state) => state.updateAnimationGroup,
+  );
+  const removeAnimationGroup = useEditorStore(
+    (state) => state.removeAnimationGroup,
+  );
+  const duplicateAnimationGroup = useEditorStore(
+    (state) => state.duplicateAnimationGroup,
+  );
+  const selectedGroupId = useEditorStore(
+    (state) => state.animationGroupId,
+  );
+  const setSelectedGroupId = useEditorStore(
+    (state) => state.setAnimationGroupId,
   );
   const setDesignView = useEditorStore((state) => state.setDesignView);
   const setActiveFilePath = useEditorStore(
@@ -95,20 +112,29 @@ export function AnimationDock() {
   const targetLabel = targetModule
     ? getModuleDefinitionSafe(targetModule.type).label
     : "页面";
-  const keyframes = targetModule
-    ? targetModule.keyframes ?? DEFAULT_KEYFRAME_ANIMATION
-    : page.keyframes ?? DEFAULT_KEYFRAME_ANIMATION;
+  const targetNode = targetModule ?? page;
+  const target = targetModule
+    ? ({ kind: "module", moduleId: targetModule.id } as const)
+    : ({ kind: "page" } as const);
+  const groups = animationGroupsOf(targetNode);
+  const selectedGroup =
+    groups.find((group) => group.id === selectedGroupId) ?? groups[0];
+  const keyframes = selectedGroup?.keyframes ?? DEFAULT_KEYFRAME_ANIMATION;
   const duration = keyframes.duration;
   const loop = keyframes.loop;
-  const presetConfig = targetModule
-    ? targetModule.animations ?? DEFAULT_ANIMATION
-    : page.animations ?? DEFAULT_ANIMATION;
+  const presetConfig = selectedGroup?.animations ?? DEFAULT_ANIMATION;
   const targetKey = targetModule ? `module-${targetModule.id}` : `page-${page.id}`;
-  const targetTrigger =
-    targetModule?.animationTrigger ?? page.animationTrigger;
+  const targetTriggers = selectedGroup?.triggers ?? [];
   const targetHasAnimation = Boolean(
     hasAnimations(presetConfig) || hasKeyframes(keyframes),
   );
+
+  useEffect(() => {
+    const nextId = selectedGroup?.id ?? null;
+    if (selectedGroupId !== nextId) {
+      setSelectedGroupId(nextId);
+    }
+  }, [selectedGroup?.id, selectedGroupId, setSelectedGroupId]);
 
   const [selectedKeyframe, setSelectedKeyframe] = useState<{
     property: KeyframeProperty;
@@ -123,7 +149,7 @@ export function AnimationDock() {
 
   useEffect(() => {
     setSelectedKeyframe(null);
-  }, [targetKey]);
+  }, [targetKey, selectedGroup?.id]);
 
   useEffect(() => {
     if (time > duration) {
@@ -215,7 +241,12 @@ export function AnimationDock() {
       window.removeEventListener("pointerup", up);
       setDragging(null);
       if (Math.abs(latestTime - keyframe.time) > 1) {
-        updateKeyframe(property, keyframe.id, { time: latestTime });
+        updateKeyframe(
+          property,
+          keyframe.id,
+          { time: latestTime },
+          selectedGroup?.id,
+        );
       }
     };
     window.addEventListener("pointermove", move);
@@ -349,7 +380,7 @@ export function AnimationDock() {
               onBlur={(event) => {
                 const seconds = Number(event.target.value);
                 if (Number.isFinite(seconds) && seconds > 0) {
-                  setDuration(seconds * 1000);
+                  setDuration(seconds * 1000, selectedGroup?.id);
                 }
               }}
             />
@@ -358,7 +389,7 @@ export function AnimationDock() {
           <IconButton
             label={loop ? "关闭循环" : "开启循环"}
             active={loop}
-            onClick={() => setLoop(!loop)}
+            onClick={() => setLoop(!loop, selectedGroup?.id)}
           >
             <Repeat size={15} />
           </IconButton>
@@ -369,19 +400,114 @@ export function AnimationDock() {
         </IconButton>
       </header>
 
+      <div className="animation-group-bar">
+        <div className="animation-group-list">
+          {groups.length === 0 ? (
+            <span className="animation-group-empty">
+              还没有动画，点击右侧 + 新建
+            </span>
+          ) : (
+            groups.map((group) => (
+              <button
+                key={group.id}
+                type="button"
+                className={clsx(
+                  "animation-group-chip",
+                  group.id === selectedGroup?.id && "is-active",
+                  !group.enabled && "is-disabled",
+                )}
+                onClick={() => setSelectedGroupId(group.id)}
+              >
+                <span className="animation-group-name">{group.name}</span>
+                <small>
+                  {group.triggers.length > 0
+                    ? `${group.triggers.length} 触发`
+                    : "自动"}
+                </small>
+              </button>
+            ))
+          )}
+        </div>
+        <div className="animation-group-actions">
+          {selectedGroup ? (
+            <>
+              <input
+                key={`${targetKey}-${selectedGroup.id}-name`}
+                className="animation-group-rename"
+                defaultValue={selectedGroup.name}
+                onBlur={(event) =>
+                  updateAnimationGroup(target, selectedGroup.id, {
+                    name: event.target.value,
+                  })
+                }
+                title="重命名动画"
+              />
+              <label className="animation-group-enabled">
+                <input
+                  type="checkbox"
+                  checked={selectedGroup.enabled}
+                  onChange={(event) =>
+                    updateAnimationGroup(target, selectedGroup.id, {
+                      enabled: event.target.checked,
+                    })
+                  }
+                />
+                启用
+              </label>
+            </>
+          ) : null}
+          <IconButton
+            label="新建动画"
+            onClick={() => {
+              const id = addAnimationGroup(target);
+              setSelectedGroupId(id);
+              setTab("presets");
+            }}
+          >
+            <Plus size={15} />
+          </IconButton>
+          <IconButton
+            label="复制动画"
+            disabled={!selectedGroup}
+            onClick={() => {
+              if (!selectedGroup) {
+                return;
+              }
+              const id = duplicateAnimationGroup(target, selectedGroup.id);
+              if (id) {
+                setSelectedGroupId(id);
+              }
+            }}
+          >
+            <Copy size={14} />
+          </IconButton>
+          <IconButton
+            label="删除动画"
+            disabled={!selectedGroup}
+            onClick={() => {
+              if (selectedGroup) {
+                removeAnimationGroup(target, selectedGroup.id);
+              }
+            }}
+          >
+            <Trash2 size={14} />
+          </IconButton>
+        </div>
+      </div>
+
       {tab === "trigger" ? (
         <div className="animation-presets">
           <AnimationTriggerSection
-            trigger={targetTrigger}
+            triggers={targetTriggers}
             modules={page.modules}
             scope={targetModule ? "module" : "page"}
             targetKey={targetKey}
             hasAnimation={targetHasAnimation}
-            onChange={(trigger) =>
-              targetModule
-                ? setModuleAnimationTrigger(targetModule.id, trigger)
-                : setPageAnimationTrigger(trigger)
-            }
+            onChange={(triggers) => {
+              const groupId =
+                selectedGroup?.id ?? addAnimationGroup(target);
+              setAnimationGroupTriggers(target, groupId, triggers);
+            }}
           />
         </div>
       ) : tab === "presets" ? (
@@ -389,11 +515,15 @@ export function AnimationDock() {
           <AnimationSection
             config={presetConfig}
             scope={targetModule ? "module" : "page"}
-            onChange={(patch) =>
-              targetModule
-                ? setModuleAnimations(targetModule.id, patch)
-                : setPageAnimations(patch)
-            }
+            onChange={(patch) => {
+              const groupId =
+                selectedGroup?.id ?? addAnimationGroup(target);
+              if (targetModule) {
+                setModuleAnimations(targetModule.id, patch, groupId);
+              } else {
+                setPageAnimations(patch, groupId);
+              }
+            }}
             onPreview={() => {
               setActiveFilePath(null);
               setDesignView("preview");
@@ -409,7 +539,11 @@ export function AnimationDock() {
                 value=""
                 onChange={(event) => {
                   if (event.target.value) {
-                    addAnimationTrack(event.target.value, time);
+                    addAnimationTrack(
+                      event.target.value,
+                      time,
+                      selectedGroup?.id,
+                    );
                   }
                 }}
                 disabled={availableTracks.length === 0}
@@ -438,7 +572,9 @@ export function AnimationDock() {
                     type="button"
                     className="timeline-add-keyframe"
                     title={`在 ${formatTime(time)} 添加${definition.label}关键帧`}
-                    onClick={() => addKeyframe(property, time)}
+                    onClick={() =>
+                      addKeyframe(property, time, undefined, selectedGroup?.id)
+                    }
                   >
                     <Plus size={12} />
                   </button>
@@ -446,7 +582,9 @@ export function AnimationDock() {
                     type="button"
                     className="timeline-remove-track"
                     title="删除轨道"
-                    onClick={() => removeAnimationTrack(property)}
+                    onClick={() =>
+                      removeAnimationTrack(property, selectedGroup?.id)
+                    }
                   >
                     <X size={11} />
                   </button>
@@ -551,6 +689,7 @@ export function AnimationDock() {
                         selectedKeyframe.property,
                         selectedData.id,
                         { time: seconds * 1000 },
+                        selectedGroup?.id,
                       );
                     }
                   }}
@@ -573,6 +712,7 @@ export function AnimationDock() {
                         selectedKeyframe.property,
                         selectedData.id,
                         { value },
+                        selectedGroup?.id,
                       );
                     }
                   }}
@@ -588,6 +728,7 @@ export function AnimationDock() {
                       selectedKeyframe.property,
                       selectedData.id,
                       { easing: event.target.value },
+                      selectedGroup?.id,
                     )
                   }
                 >
@@ -605,6 +746,7 @@ export function AnimationDock() {
                   removeKeyframe(
                     selectedKeyframe.property,
                     selectedData.id,
+                    selectedGroup?.id,
                   );
                   setSelectedKeyframe(null);
                 }}

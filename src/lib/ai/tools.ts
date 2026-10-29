@@ -7,6 +7,7 @@ import type {
   PropValue,
 } from "../../model/types";
 import { createId } from "../../model/defaults";
+import { animationGroupById } from "../../model/animationGroups";
 import {
   DEFAULT_ANIMATION,
   EASING_OPTIONS,
@@ -70,6 +71,7 @@ export const TOOL_LABELS: Record<string, string> = {
   write_current_file: "写入当前文件",
   set_preset_animation: "设置预设动画",
   set_animation_trigger: "设置动画触发",
+  create_animation_group: "新建动画组",
   set_animation_timing: "设置动画时长",
   add_animation_track: "添加动画轨道",
   remove_animation_track: "删除动画轨道",
@@ -326,6 +328,7 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
         properties: {
           target: { type: "string", enum: ["page", "module"] },
           moduleId: { type: "string" },
+          groupId: { type: "string", description: "动画组 ID；省略时使用第一组" },
           entrance: {
             type: "string",
             enum: ENTRANCE_VALUES,
@@ -365,6 +368,7 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
         properties: {
           target: { type: "string", enum: ["page", "module"] },
           moduleId: { type: "string", description: "target=module 时的目标组件 ID" },
+          groupId: { type: "string", description: "动画组 ID；省略时使用第一组" },
           type: {
             type: "string",
             enum: ["auto", "click", "hover", "condition", "custom"],
@@ -397,6 +401,23 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
   {
     type: "function",
     function: {
+      name: "create_animation_group",
+      description:
+        "为页面或组件创建一个新的动画组（一组独立的时间轴和触发条件）。返回 groupId，之后可用 groupId 指定该组设置预设动画、关键帧或触发条件。",
+      parameters: {
+        type: "object",
+        properties: {
+          target: { type: "string", enum: ["page", "module"] },
+          moduleId: { type: "string", description: "target=module 时的目标组件 ID" },
+          name: { type: "string", description: "动画组名称" },
+        },
+        required: ["target"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "set_animation_timing",
       description:
         "设置页面或组件关键帧动画的总时长（毫秒）和是否循环。",
@@ -405,6 +426,7 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
         properties: {
           target: { type: "string", enum: ["page", "module"] },
           moduleId: { type: "string" },
+          groupId: { type: "string", description: "动画组 ID；省略时使用第一组" },
           duration: { type: "number", description: "关键帧动画总时长，单位毫秒" },
           loop: { type: "boolean", description: "是否循环播放" },
         },
@@ -423,6 +445,7 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
         properties: {
           target: { type: "string", enum: ["page", "module"] },
           moduleId: { type: "string" },
+          groupId: { type: "string", description: "动画组 ID；省略时使用第一组" },
           property: {
             type: "string",
             enum: ANIMATABLE_KEYS,
@@ -446,6 +469,7 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
         properties: {
           target: { type: "string", enum: ["page", "module"] },
           moduleId: { type: "string" },
+          groupId: { type: "string", description: "动画组 ID；省略时使用第一组" },
           property: { type: "string", enum: ANIMATABLE_KEYS },
         },
         required: ["target", "property"],
@@ -463,6 +487,7 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
         properties: {
           target: { type: "string", enum: ["page", "module"] },
           moduleId: { type: "string" },
+          groupId: { type: "string", description: "动画组 ID；省略时使用第一组" },
           property: { type: "string", enum: ANIMATABLE_KEYS },
           time: { type: "number", description: "时间点，单位毫秒" },
           value: { type: "number", description: "属性值，会按轨道范围自动限制" },
@@ -483,6 +508,7 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
         properties: {
           target: { type: "string", enum: ["page", "module"] },
           moduleId: { type: "string" },
+          groupId: { type: "string", description: "动画组 ID；省略时使用第一组" },
           property: { type: "string", enum: ANIMATABLE_KEYS },
           keyframeId: { type: "string" },
           time: { type: "number" },
@@ -503,6 +529,7 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
         properties: {
           target: { type: "string", enum: ["page", "module"] },
           moduleId: { type: "string" },
+          groupId: { type: "string", description: "动画组 ID；省略时使用第一组" },
           property: { type: "string", enum: ANIMATABLE_KEYS },
           keyframeId: { type: "string" },
         },
@@ -561,6 +588,9 @@ function moduleSummary(module: ModuleNode) {
     ...(module.animationTrigger
       ? { animationTrigger: module.animationTrigger }
       : {}),
+    ...(module.animationGroups
+      ? { animationGroups: module.animationGroups }
+      : {}),
   };
 }
 
@@ -611,12 +641,14 @@ function animationTarget(
 function presetAnimationFor(
   target: KeyframeTarget,
   page: Page,
+  groupId?: string,
 ): AnimationConfig {
-  if (target.kind === "page") {
-    return page.animations ?? DEFAULT_ANIMATION;
-  }
+  const host =
+    target.kind === "page"
+      ? page
+      : page.modules.find((module) => module.id === target.moduleId);
   return (
-    page.modules.find((module) => module.id === target.moduleId)?.animations ??
+    (host ? animationGroupById(host, groupId)?.animations : undefined) ??
     DEFAULT_ANIMATION
   );
 }
@@ -624,21 +656,23 @@ function presetAnimationFor(
 function keyframesFor(
   target: KeyframeTarget,
   page: Page,
+  groupId?: string,
 ): KeyframeAnimation {
-  if (target.kind === "page") {
-    return normalizeKeyframeAnimation(page.keyframes);
-  }
-  const module = page.modules.find(
-    (candidate) => candidate.id === target.moduleId,
+  const host =
+    target.kind === "page"
+      ? page
+      : page.modules.find((module) => module.id === target.moduleId);
+  return normalizeKeyframeAnimation(
+    host ? animationGroupById(host, groupId)?.keyframes : undefined,
   );
-  return normalizeKeyframeAnimation(module?.keyframes);
 }
 
 function setKeyframes(
   target: KeyframeTarget,
   config: KeyframeAnimation,
+  groupId?: string,
 ): void {
-  useEditorStore.getState().setTargetKeyframes(target, config);
+  useEditorStore.getState().setTargetKeyframes(target, config, groupId);
 }
 
 function animationTrackDefinition(property: string) {
@@ -686,6 +720,9 @@ export function executeAgentTool(
             ...(page.keyframes ? { keyframes: page.keyframes } : {}),
             ...(page.animationTrigger
               ? { animationTrigger: page.animationTrigger }
+              : {}),
+            ...(page.animationGroups
+              ? { animationGroups: page.animationGroups }
               : {}),
             modules: page.modules.map(moduleSummary),
           },
@@ -910,6 +947,8 @@ export function executeAgentTool(
 
     if (name === "set_animation_trigger") {
       const { target, label } = animationTarget(args, page);
+      const groupId =
+        typeof args.groupId === "string" ? args.groupId : undefined;
       const rawType = typeof args.type === "string" ? args.type : "auto";
       const sourceModuleId =
         typeof args.sourceModuleId === "string"
@@ -954,7 +993,9 @@ export function executeAgentTool(
             : String(args.value),
         code: typeof args.code === "string" ? args.code : undefined,
       });
-      if (target.kind === "page") {
+      if (groupId) {
+        state.setAnimationGroupTriggers(target, groupId, [trigger]);
+      } else if (target.kind === "page") {
         state.setPageAnimationTrigger(trigger);
       } else {
         state.setModuleAnimationTrigger(target.moduleId, trigger);
@@ -968,9 +1009,25 @@ export function executeAgentTool(
       };
     }
 
+    if (name === "create_animation_group") {
+      const { target, label } = animationTarget(args, page);
+      const nameValue =
+        typeof args.name === "string" && args.name.trim()
+          ? args.name.trim()
+          : undefined;
+      const groupId = state.addAnimationGroup(target, nameValue);
+      return {
+        ok: true,
+        summary: `为${label}新建动画组 ${groupId}`,
+        result: { target, groupId },
+      };
+    }
+
     if (name === "set_preset_animation") {
       const { target, label } = animationTarget(args, page);
-      const current = presetAnimationFor(target, page);
+      const groupId =
+        typeof args.groupId === "string" ? args.groupId : undefined;
+      const current = presetAnimationFor(target, page, groupId);
       const patch: Partial<AnimationConfig> = {};
       if (args.entrance !== undefined) {
         patch.entrance = presetValue(args.entrance, ENTRANCE_ANIMATIONS, "entrance");
@@ -997,9 +1054,9 @@ export function executeAgentTool(
         throw new Error("没有可更新的预设动画属性");
       }
       if (target.kind === "page") {
-        state.setPageAnimations(patch);
+        state.setPageAnimations(patch, groupId);
       } else {
-        state.setModuleAnimations(target.moduleId, patch);
+        state.setModuleAnimations(target.moduleId, patch, groupId);
       }
       return {
         ok: true,
@@ -1010,18 +1067,20 @@ export function executeAgentTool(
 
     if (name === "set_animation_timing") {
       const { target, label } = animationTarget(args, page);
+      const groupId =
+        typeof args.groupId === "string" ? args.groupId : undefined;
       const duration = numberArg(args, "duration");
       const loop = typeof args.loop === "boolean" ? args.loop : undefined;
       if (duration === undefined && loop === undefined) {
         throw new Error("duration 和 loop 至少提供一个");
       }
-      const config = keyframesFor(target, page);
+      const config = keyframesFor(target, page, groupId);
       const next = normalizeKeyframeAnimation({
         ...config,
         duration: duration ?? config.duration,
         loop: loop ?? config.loop,
       });
-      setKeyframes(target, next);
+      setKeyframes(target, next, groupId);
       return {
         ok: true,
         summary: `更新${label}的动画时长/循环`,
@@ -1031,12 +1090,14 @@ export function executeAgentTool(
 
     if (name === "add_animation_track") {
       const { target, label } = animationTarget(args, page);
+      const groupId =
+        typeof args.groupId === "string" ? args.groupId : undefined;
       const property = stringArg(args, "property");
       const definition = animationTrackDefinition(property);
       if (!definition) {
         throw new Error(`不支持的动画属性: ${property}`);
       }
-      const config = keyframesFor(target, page);
+      const config = keyframesFor(target, page, groupId);
       if ((config.tracks[property]?.length ?? 0) > 0) {
         throw new Error(`动画轨道已存在: ${property}`);
       }
@@ -1063,7 +1124,7 @@ export function executeAgentTool(
           ],
         },
       });
-      setKeyframes(target, next);
+      setKeyframes(target, next, groupId);
       return {
         ok: true,
         summary: `为${label}添加轨道 ${definition.label}`,
@@ -1073,14 +1134,16 @@ export function executeAgentTool(
 
     if (name === "remove_animation_track") {
       const { target, label } = animationTarget(args, page);
+      const groupId =
+        typeof args.groupId === "string" ? args.groupId : undefined;
       const property = stringArg(args, "property");
-      const config = keyframesFor(target, page);
+      const config = keyframesFor(target, page, groupId);
       if (!config.tracks[property]) {
         throw new Error(`动画轨道不存在: ${property}`);
       }
       const tracks = { ...config.tracks };
       delete tracks[property];
-      setKeyframes(target, { ...config, tracks });
+      setKeyframes(target, { ...config, tracks }, groupId);
       return {
         ok: true,
         summary: `删除${label}的动画轨道 ${property}`,
@@ -1090,12 +1153,14 @@ export function executeAgentTool(
 
     if (name === "add_animation_keyframe") {
       const { target, label } = animationTarget(args, page);
+      const groupId =
+        typeof args.groupId === "string" ? args.groupId : undefined;
       const property = stringArg(args, "property");
       const definition = animationTrackDefinition(property);
       if (!definition) {
         throw new Error(`不支持的动画属性: ${property}`);
       }
-      const config = keyframesFor(target, page);
+      const config = keyframesFor(target, page, groupId);
       const track = config.tracks[property] ?? [];
       const time = Math.min(
         config.duration,
@@ -1122,7 +1187,7 @@ export function executeAgentTool(
           ],
         },
       });
-      setKeyframes(target, next);
+      setKeyframes(target, next, groupId);
       return {
         ok: true,
         summary: `为${label}的${definition.label}添加关键帧`,
@@ -1132,13 +1197,15 @@ export function executeAgentTool(
 
     if (name === "update_animation_keyframe") {
       const { target, label } = animationTarget(args, page);
+      const groupId =
+        typeof args.groupId === "string" ? args.groupId : undefined;
       const property = stringArg(args, "property");
       const keyframeId = stringArg(args, "keyframeId");
       const definition = animationTrackDefinition(property);
       if (!definition) {
         throw new Error(`不支持的动画属性: ${property}`);
       }
-      const config = keyframesFor(target, page);
+      const config = keyframesFor(target, page, groupId);
       const track = config.tracks[property] ?? [];
       const keyframe = track.find((item) => item.id === keyframeId);
       if (!keyframe) {
@@ -1171,7 +1238,7 @@ export function executeAgentTool(
           ),
         },
       });
-      setKeyframes(target, next);
+      setKeyframes(target, next, groupId);
       return {
         ok: true,
         summary: `修改${label}的${definition.label}关键帧`,
@@ -1181,9 +1248,11 @@ export function executeAgentTool(
 
     if (name === "remove_animation_keyframe") {
       const { target, label } = animationTarget(args, page);
+      const groupId =
+        typeof args.groupId === "string" ? args.groupId : undefined;
       const property = stringArg(args, "property");
       const keyframeId = stringArg(args, "keyframeId");
-      const config = keyframesFor(target, page);
+      const config = keyframesFor(target, page, groupId);
       const track = config.tracks[property] ?? [];
       if (!track.some((item) => item.id === keyframeId)) {
         throw new Error(`关键帧不存在: ${keyframeId}`);
@@ -1195,7 +1264,7 @@ export function executeAgentTool(
           [property]: track.filter((item) => item.id !== keyframeId),
         },
       });
-      setKeyframes(target, next);
+      setKeyframes(target, next, groupId);
       return {
         ok: true,
         summary: `删除${label}的${property}关键帧`,

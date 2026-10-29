@@ -1,118 +1,117 @@
+import { Plus, Trash2 } from "lucide-react";
 import type {
   AnimationTrigger,
   AnimationTriggerType,
   ModuleNode,
 } from "../../model/types";
-import {
-  DEFAULT_TRIGGER,
-  normalizeTrigger,
-} from "../../model/animations";
+import { normalizeTrigger } from "../../model/animations";
 import { getModuleDefinitionSafe } from "../../modules/registry";
 
-const TRIGGER_LABELS: Record<AnimationTriggerType, string> = {
-  auto: "自动播放",
+const TRIGGER_LABELS: Record<
+  Exclude<AnimationTriggerType, "auto">,
+  string
+> = {
   click: "点击时",
   hover: "鼠标悬停时",
   condition: "组件值条件",
   custom: "自定义 JS",
 };
 
-export function AnimationTriggerSection({
+const TRIGGER_OPTIONS = (
+  Object.keys(TRIGGER_LABELS) as Array<Exclude<AnimationTriggerType, "auto">>
+).map((value) => ({ value, label: TRIGGER_LABELS[value] }));
+
+function TriggerEditor({
   trigger,
+  index,
   modules,
-  scope,
   targetKey,
-  hasAnimation,
-  onChange,
+  onPatch,
+  onRemove,
 }: {
-  trigger?: AnimationTrigger;
+  trigger: AnimationTrigger;
+  index: number;
   modules: ModuleNode[];
-  scope: "page" | "module";
   targetKey: string;
-  hasAnimation: boolean;
-  onChange: (trigger: AnimationTrigger) => void;
+  onPatch: (patch: Partial<AnimationTrigger>) => void;
+  onRemove: () => void;
 }) {
-  const current = trigger ?? DEFAULT_TRIGGER;
-  const update = (patch: Partial<AnimationTrigger>) => {
-    onChange(normalizeTrigger({ ...current, ...patch }));
-  };
-  const changeType = (type: AnimationTriggerType) => {
-    if (type === "condition") {
-      update({
-        type,
-        moduleId: current.moduleId || modules[0]?.id || "",
-        property: current.property ?? "value",
-        operator: current.operator ?? "gt",
-        value: current.value ?? "",
+  const type = trigger.type === "auto" ? "click" : trigger.type;
+  const updateType = (next: Exclude<AnimationTriggerType, "auto">) => {
+    if (next === "condition") {
+      onPatch({
+        type: next,
+        moduleId: trigger.moduleId || modules[0]?.id || "",
+        property: trigger.property ?? "value",
+        operator: trigger.operator ?? "gt",
+        value: trigger.value ?? "",
       });
       return;
     }
-    if (type === "custom") {
-      update({
-        type,
+    if (next === "custom") {
+      onPatch({
+        type: next,
         code:
-          current.code?.trim() ||
+          trigger.code?.trim() ||
           '// 返回 true 时播放\n// element: 当前组件，modules: 页面组件，event: 触发事件\nreturn true;',
       });
       return;
     }
-    update({ type });
+    onPatch({ type: next });
   };
 
   return (
-    <div className="animation-trigger-panel">
-      <div className="animation-trigger-head">
-        <div>
-          <strong>动画触发条件</strong>
-          <small>
-            {scope === "page" ? "页面动画" : "组件动画"} ·{" "}
-            {TRIGGER_LABELS[current.type]}
-          </small>
-        </div>
-        {!hasAnimation ? <span className="trigger-warning">请先添加动画</span> : null}
+    <div className="animation-trigger-card">
+      <div className="animation-trigger-card-head">
+        <span>条件 {index + 1}</span>
+        <button
+          type="button"
+          className="animation-trigger-remove"
+          onClick={onRemove}
+          title="删除这个触发条件"
+        >
+          <Trash2 size={12} />
+          删除
+        </button>
       </div>
 
       <label className="trigger-field">
         <span>触发方式</span>
         <select
-          value={current.type}
+          value={type}
           onChange={(event) =>
-            changeType(event.target.value as AnimationTriggerType)
+            updateType(
+              event.target.value as Exclude<AnimationTriggerType, "auto">,
+            )
           }
         >
-          <option value="auto">自动播放</option>
-          <option value="click">点击时</option>
-          <option value="hover">鼠标悬停时</option>
-          <option value="condition">组件值条件</option>
-          <option value="custom">自定义 JS</option>
+          {TRIGGER_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
       </label>
 
-      {current.type === "auto" ? (
+      {type === "click" ? (
         <p className="animation-trigger-hint">
-          页面载入后立即播放入场、循环和离场动画。
+          点击页面或组件时播放；再次点击会重新播放。
         </p>
       ) : null}
 
-      {current.type === "click" ? (
+      {type === "hover" ? (
         <p className="animation-trigger-hint">
-          点击{scope === "page" ? "页面" : "该组件"}时播放动画；再次点击会重新播放。
+          鼠标进入时播放一次；移出后再次进入可重新播放。
         </p>
       ) : null}
 
-      {current.type === "hover" ? (
-        <p className="animation-trigger-hint">
-          鼠标进入{scope === "page" ? "页面" : "该组件"}时播放一次；移出后再次进入可重新播放。
-        </p>
-      ) : null}
-
-      {current.type === "condition" ? (
+      {type === "condition" ? (
         <div className="animation-trigger-condition">
           <label className="trigger-field">
             <span>组件</span>
             <select
-              value={current.moduleId ?? ""}
-              onChange={(event) => update({ moduleId: event.target.value })}
+              value={trigger.moduleId ?? ""}
+              onChange={(event) => onPatch({ moduleId: event.target.value })}
             >
               <option value="">选择组件</option>
               {modules.map((module) => (
@@ -127,9 +126,9 @@ export function AnimationTriggerSection({
             <label className="trigger-field">
               <span>读取值</span>
               <select
-                value={current.property ?? "value"}
+                value={trigger.property ?? "value"}
                 onChange={(event) =>
-                  update({
+                  onPatch({
                     property: event.target
                       .value as AnimationTrigger["property"],
                   })
@@ -143,9 +142,9 @@ export function AnimationTriggerSection({
             <label className="trigger-field">
               <span>条件</span>
               <select
-                value={current.operator ?? "gt"}
+                value={trigger.operator ?? "gt"}
                 onChange={(event) =>
-                  update({
+                  onPatch({
                     operator: event.target
                       .value as AnimationTrigger["operator"],
                   })
@@ -158,14 +157,14 @@ export function AnimationTriggerSection({
             </label>
           </div>
 
-          {current.property === "attribute" ? (
+          {trigger.property === "attribute" ? (
             <label className="trigger-field">
               <span>属性名</span>
               <input
-                key={`${targetKey}-attribute`}
+                key={`${targetKey}-${index}-attribute`}
                 type="text"
-                defaultValue={current.attribute ?? "data-spark-value"}
-                onBlur={(event) => update({ attribute: event.target.value })}
+                defaultValue={trigger.attribute ?? "data-spark-value"}
+                onBlur={(event) => onPatch({ attribute: event.target.value })}
                 placeholder="data-spark-value"
               />
             </label>
@@ -174,42 +173,121 @@ export function AnimationTriggerSection({
           <label className="trigger-field">
             <span>比较值</span>
             <input
-              key={`${targetKey}-value`}
+              key={`${targetKey}-${index}-value`}
               type="text"
-              defaultValue={current.value ?? ""}
-              onBlur={(event) => update({ value: event.target.value })}
+              defaultValue={trigger.value ?? ""}
+              onBlur={(event) => onPatch({ value: event.target.value })}
               placeholder="例如 10 或 done"
             />
           </label>
 
           <p className="animation-trigger-hint">
-            预览中每 150ms 检查一次；输入值会读取组件内的 input / textarea /
-            select，其他组件也可以提供 data-spark-value 或 HTML 属性。
+            每 150ms 检查一次；输入值读取组件内的 input / textarea / select，
+            其他组件也可以提供 data-spark-value 或 HTML 属性。
           </p>
         </div>
       ) : null}
 
-      {current.type === "custom" ? (
+      {type === "custom" ? (
         <div className="animation-trigger-condition">
           <label className="trigger-field">
             <span>条件代码</span>
             <textarea
-              key={`${targetKey}-custom`}
-              rows={6}
+              key={`${targetKey}-${index}-custom`}
+              rows={5}
               defaultValue={
-                current.code ??
+                trigger.code ??
                 '// 返回 true 时播放\n// element: 当前组件，modules: 页面组件，event: 触发事件\nreturn true;'
               }
-              onBlur={(event) => update({ code: event.target.value })}
+              onBlur={(event) => onPatch({ code: event.target.value })}
               spellCheck={false}
             />
           </label>
           <p className="animation-trigger-hint">
-            代码会在预览和导出的页面中执行，需要返回布尔值。可用变量：
-            <code>element</code>、<code>modules</code>、<code>event</code>。
+            代码需要返回布尔值。可用变量：<code>element</code>、
+            <code>modules</code>、<code>event</code>。
           </p>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+export function AnimationTriggerSection({
+  triggers,
+  modules,
+  scope,
+  targetKey,
+  hasAnimation,
+  onChange,
+}: {
+  triggers: AnimationTrigger[];
+  modules: ModuleNode[];
+  scope: "page" | "module";
+  targetKey: string;
+  hasAnimation: boolean;
+  onChange: (triggers: AnimationTrigger[]) => void;
+}) {
+  const updateTrigger = (
+    index: number,
+    patch: Partial<AnimationTrigger>,
+  ) => {
+    onChange(
+      triggers.map((trigger, position) =>
+        position === index
+          ? normalizeTrigger({ ...trigger, ...patch })
+          : trigger,
+      ),
+    );
+  };
+
+  return (
+    <div className="animation-trigger-panel">
+      <div className="animation-trigger-head">
+        <div>
+          <strong>动画触发条件</strong>
+          <small>
+            {scope === "page" ? "页面动画" : "组件动画"} ·{" "}
+            {triggers.length > 0
+              ? `${triggers.length} 个触发条件`
+              : "自动播放"}
+          </small>
+        </div>
+        {!hasAnimation ? (
+          <span className="trigger-warning">请先添加动画</span>
+        ) : null}
+      </div>
+
+      {triggers.length === 0 ? (
+        <p className="animation-trigger-hint">
+          没有触发条件时，页面载入后会直接播放。添加条件后，动画会等待条件满足再播放。
+        </p>
+      ) : null}
+
+      <div className="animation-trigger-list">
+        {triggers.map((trigger, index) => (
+          <TriggerEditor
+            key={`${targetKey}-${index}-${trigger.type}`}
+            trigger={trigger}
+            index={index}
+            modules={modules}
+            targetKey={targetKey}
+            onPatch={(patch) => updateTrigger(index, patch)}
+            onRemove={() =>
+              onChange(triggers.filter((_, position) => position !== index))
+            }
+          />
+        ))}
+      </div>
+
+      <button
+        type="button"
+        className="btn btn-ghost animation-trigger-add"
+        onClick={() => onChange([...triggers, normalizeTrigger({ type: "click" })])}
+      >
+        <Plus size={13} />
+        添加触发条件
+      </button>
 
       {!hasAnimation ? (
         <p className="animation-trigger-hint">

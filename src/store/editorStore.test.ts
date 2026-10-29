@@ -93,6 +93,62 @@ describe("editor store", () => {
     expect((module?.height ?? 0) % 24).toBe(0);
   });
 
+  it("manages multiple animation groups per module", () => {
+    const id = useEditorStore
+      .getState()
+      .addModuleAt("core.text", 64, 64);
+    const target = { kind: "module" as const, moduleId: id! };
+    const first = useEditorStore
+      .getState()
+      .addAnimationGroup(target, "点击动画");
+    const second = useEditorStore
+      .getState()
+      .addAnimationGroup(target, "悬停动画");
+
+    useEditorStore.getState().setModuleAnimations(
+      id!,
+      { entrance: "fade-in" },
+      first,
+    );
+    useEditorStore.getState().addAnimationTrack("opacity", 0, second);
+    useEditorStore.getState().updateAnimationGroup(target, second, {
+      triggers: [{ type: "hover" }],
+    });
+
+    const module = useEditorStore
+      .getState()
+      .project.pages[0].modules.find((candidate) => candidate.id === id);
+    expect(module?.animationGroups).toHaveLength(2);
+    expect(
+      module?.animationGroups?.find((group) => group.id === first)?.animations
+        ?.entrance,
+    ).toBe("fade-in");
+    expect(
+      module?.animationGroups?.find((group) => group.id === second)?.keyframes
+        ?.tracks.opacity,
+    ).toHaveLength(1);
+    expect(
+      module?.animationGroups?.find((group) => group.id === second)?.triggers,
+    ).toEqual([{ type: "hover" }]);
+
+    const copy = useEditorStore
+      .getState()
+      .duplicateAnimationGroup(target, second);
+    expect(copy).toBeTruthy();
+    expect(
+      useEditorStore.getState().project.pages[0].modules.find(
+        (candidate) => candidate.id === id,
+      )?.animationGroups,
+    ).toHaveLength(3);
+
+    useEditorStore.getState().removeAnimationGroup(target, first);
+    expect(
+      useEditorStore.getState().project.pages[0].modules.find(
+        (candidate) => candidate.id === id,
+      )?.animationGroups,
+    ).toHaveLength(2);
+  });
+
   it("stores independent page and module animations", () => {
     const id = useEditorStore
       .getState()

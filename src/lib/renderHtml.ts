@@ -5,6 +5,7 @@ import { rectOf } from "./geometry";
 import { ANIMATION_CSS, wrapAnimatedHtml } from "./animation";
 import { hasAnimations } from "../model/animations";
 import { hasKeyframes } from "../model/keyframes";
+import { animationGroupsOf } from "../model/animationGroups";
 import { buildKeyframeAnimation } from "./keyframes";
 
 const PREVIEW_BRIDGE = String.raw`<script>
@@ -78,7 +79,7 @@ const PREVIEW_BRIDGE = String.raw`<script>
 
 const ANIMATION_TRIGGER_SCRIPT = String.raw`<script>
 (function () {
-  var roots = document.querySelectorAll("[data-spark-anim-trigger]");
+  var roots = document.querySelectorAll("[data-spark-anim-triggers]");
   if (!roots.length) return;
 
   function layersOf(root) {
@@ -98,7 +99,14 @@ const ANIMATION_TRIGGER_SCRIPT = String.raw`<script>
 
   function play(root) {
     var layers = layersOf(root);
+    var group = root.getAttribute("data-spark-anim-group");
     for (var index = 0; index < layers.length; index += 1) {
+      if (
+        group &&
+        layers[index].getAttribute("data-spark-anim-group") !== group
+      ) {
+        continue;
+      }
       var style = layers[index].getAttribute("data-spark-anim-style");
       if (!style) continue;
       layers[index].style.animation = "none";
@@ -185,37 +193,48 @@ const ANIMATION_TRIGGER_SCRIPT = String.raw`<script>
     }
   }
 
-  function parseTrigger(root) {
+  function parseTriggers(root) {
     try {
-      return JSON.parse(root.getAttribute("data-spark-anim-trigger") || "{}");
+      var parsed = JSON.parse(
+        root.getAttribute("data-spark-anim-triggers") || "[]",
+      );
+      return Array.isArray(parsed) ? parsed : [];
     } catch (error) {
-      return null;
+      return [];
     }
   }
 
   for (var index = 0; index < roots.length; index += 1) {
     (function (root) {
-      var trigger = parseTrigger(root);
-      if (!trigger || !trigger.type || trigger.type === "auto") return;
-      if (trigger.type === "click") {
+      var triggers = parseTriggers(root);
+      if (!triggers.length) return;
+      var hasClick = triggers.some(function (trigger) {
+        return trigger.type === "click";
+      });
+      var hasHover = triggers.some(function (trigger) {
+        return trigger.type === "hover";
+      });
+      if (hasClick) {
         root.addEventListener("click", function () {
           play(root);
         });
-        return;
       }
-      if (trigger.type === "hover") {
+      if (hasHover) {
         root.addEventListener("mouseenter", function () {
           play(root);
         });
-        return;
       }
-      if (trigger.type !== "condition" && trigger.type !== "custom") return;
+      var polled = triggers.filter(function (trigger) {
+        return trigger.type === "condition" || trigger.type === "custom";
+      });
+      if (!polled.length) return;
       var active = false;
       function check(event) {
-        var matched =
-          trigger.type === "condition"
+        var matched = polled.some(function (trigger) {
+          return trigger.type === "condition"
             ? evaluateCondition(root, trigger)
             : evaluateCustom(root, trigger, event);
+        });
         if (matched && !active) {
           active = true;
           play(root);
@@ -238,6 +257,42 @@ export interface RenderOptions {
   preview?: boolean;
 }
 
+function renderAnimationGroups(
+  content: string,
+  groups: ReturnType<typeof animationGroupsOf>,
+  targetId: string,
+  keyframeCss: string[],
+): string {
+  let result = content;
+  for (const group of groups) {
+    if (!group.enabled) {
+      continue;
+    }
+    if (!hasAnimations(group.animations) && !hasKeyframes(group.keyframes)) {
+      continue;
+    }
+    const paused = group.triggers.length > 0;
+    const groupKey = `${targetId}-${group.id}`;
+    const keyframe = buildKeyframeAnimation(group.keyframes, groupKey, {
+      paused,
+      group: group.id,
+    });
+    if (keyframe.css) {
+      keyframeCss.push(keyframe.css);
+    }
+    let html = keyframe.wrap(result);
+    html = wrapAnimatedHtml(html, group.animations, {
+      paused,
+      group: group.id,
+    });
+    if (paused) {
+      html = `<div class="spark-anim-trigger-root" data-spark-anim-group="${htmlAttr(group.id)}" data-spark-anim-triggers="${htmlAttr(JSON.stringify(group.triggers))}">${html}</div>`;
+    }
+    result = html;
+  }
+  return result;
+}
+
 export function renderPageHtml(
   page: Page,
   project: Project,
@@ -248,60 +303,36 @@ export function renderPageHtml(
   const modules = page.modules
     .map((module, index) => {
       const definition = getModuleDefinitionSafe(module.type);
-      const paused = Boolean(
-        module.animationTrigger &&
-          (hasAnimations(module.animations) ||
-            hasKeyframes(module.keyframes)),
-      );
-      const keyframe = buildKeyframeAnimation(
-        module.keyframes,
-        `module-${module.id}`,
-        { paused },
-      );
-      keyframeCss.push(keyframe.css);
-      const content = keyframe.wrap(
-        definition.renderHtml(module, {
-          theme,
-          preview: true,
-        }),
-      );
-      const animatedContent = wrapAnimatedHtml(content, module.animations, {
-        paused,
+      const content = definition.renderHtml(module, {
+        theme,
+        preview: true,
       });
-      const triggerContent =
-        paused && module.animationTrigger
-          ? `<div class="spark-anim-trigger-root" data-spark-anim-trigger="${htmlAttr(JSON.stringify(module.animationTrigger))}">${animatedContent}</div>`
-          : animatedContent;
+      const triggerContent = renderAnimationGroups(
+        content,
+        animationGroupsOf(module),
+        `module-${module.id}`,
+        keyframeCss,
+      );
       const rect = rectOf(module, page.width, page.height);
       return `<div id="${htmlAttr(module.id)}" class="spark-module" data-spark-module-id="${htmlAttr(module.id)}" data-spark-module-type="${htmlAttr(module.type)}" style="position:absolute;left:${rect.x}px;top:${rect.y}px;width:${module.width}px;height:${module.height}px;z-index:${index + 1};">${triggerContent}</div>`;
     })
     .join("\n");
 
-  const pagePaused = Boolean(
-    page.animationTrigger &&
-      (hasAnimations(page.animations) || hasKeyframes(page.keyframes)),
-  );
-  const pageKeyframe = buildKeyframeAnimation(
-    page.keyframes,
-    `page-${page.id}`,
-    { paused: pagePaused },
-  );
-  keyframeCss.push(pageKeyframe.css);
   const customScript = page.customScript?.trim()
     ? `<script${page.scriptLanguage === "typescript" ? ' type="text/typescript"' : ""}>${inlineScript(page.customScript)}</script>`
     : "";
   const pageHtml = `<div class="spark-page">${modules}</div>`;
-  const keyframePage = pageKeyframe.wrap(pageHtml);
-  const animatedPage = wrapAnimatedHtml(keyframePage, page.animations, {
-    paused: pagePaused,
-  });
-  const triggerPage =
-    pagePaused && page.animationTrigger
-      ? `<div class="spark-anim-trigger-root" data-spark-anim-trigger="${htmlAttr(JSON.stringify(page.animationTrigger))}">${animatedPage}</div>`
-      : animatedPage;
+  const triggerPage = renderAnimationGroups(
+    pageHtml,
+    animationGroupsOf(page),
+    `page-${page.id}`,
+    keyframeCss,
+  );
   const hasTriggers = Boolean(
-    page.animationTrigger ||
-      page.modules.some((module) => module.animationTrigger),
+    animationGroupsOf(page).some((group) => group.triggers.length > 0) ||
+      page.modules.some((module) =>
+        animationGroupsOf(module).some((group) => group.triggers.length > 0),
+      ),
   );
   const triggerScript = hasTriggers ? ANIMATION_TRIGGER_SCRIPT : "";
   const previewBridge = options.preview ? PREVIEW_BRIDGE : "";

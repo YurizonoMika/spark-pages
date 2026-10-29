@@ -53,6 +53,66 @@ describe("project XML", () => {
     });
   });
 
+  it("round-trips multiple animation groups", () => {
+    const project = defaultProject();
+    const page = project.pages[0];
+    page.modules[0].animationGroups = [
+      {
+        id: "anim_click",
+        name: "点击动画",
+        enabled: true,
+        animations: {
+          entrance: "fade-in",
+          loop: "",
+          exit: "",
+          duration: 500,
+          delay: 0,
+          exitDelay: 1000,
+          easing: "ease-out",
+        },
+        triggers: [{ type: "click" }],
+      },
+      {
+        id: "anim_hover",
+        name: "悬停动画",
+        enabled: false,
+        keyframes: {
+          duration: 1000,
+          loop: true,
+          tracks: {
+            opacity: [{ id: "kf1", time: 0, value: 1, easing: "linear" }],
+          },
+        },
+        triggers: [
+          { type: "hover" },
+          {
+            type: "condition",
+            moduleId: page.modules[1].id,
+            property: "value",
+            operator: "gt",
+            value: "5",
+          },
+        ],
+      },
+    ];
+
+    const parsed = parseProjectXml(serializeProject(project));
+    const groups = parsed.pages[0].modules[0].animationGroups;
+
+    expect(groups).toHaveLength(2);
+    expect(groups?.[0]).toMatchObject({
+      id: "anim_click",
+      name: "点击动画",
+      enabled: true,
+    });
+    expect(groups?.[1]).toMatchObject({
+      id: "anim_hover",
+      name: "悬停动画",
+      enabled: false,
+    });
+    expect(groups?.[1].triggers).toHaveLength(2);
+  });
+
   it("round-trips embedded image data URLs", () => {
     const project = defaultProject();
     const src = `data:image/png;base64,${"iVBORw0KGgo=".repeat(4000)}`;

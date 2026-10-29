@@ -15,6 +15,7 @@ import type {
   AnchorX,
   AnchorY,
   AnimationConfig,
+  AnimationGroup,
   AnimationTrigger,
   Keyframe,
   KeyframeAnimation,
@@ -28,6 +29,7 @@ import type {
   Theme,
 } from "../model/types";
 import { escapeXmlAttr, wrapCdata } from "../lib/escape";
+import { normalizeAnimationGroup } from "../model/animationGroups";
 
 export class ProjectXmlError extends Error {
   constructor(message: string) {
@@ -163,6 +165,27 @@ function parseAnimationTrigger(
   return hasAnimationTrigger(trigger) ? trigger : undefined;
 }
 
+function parseAnimationGroups(
+  element: Element | undefined,
+): AnimationGroup[] | undefined {
+  if (!element) {
+    return undefined;
+  }
+  const groups = directChildren(element, "animation-group").map((group) =>
+    normalizeAnimationGroup({
+      id: readAttr(group, "id")?.trim() || createId("anim"),
+      name: readAttr(group, "name") ?? "动画",
+      enabled: readAttr(group, "enabled") !== "false",
+      animations: parseAnimations(directChildren(group, "animations")[0]),
+      keyframes: parseKeyframes(directChildren(group, "keyframes")[0]),
+      triggers: directChildren(group, "animation-trigger")
+        .map(parseAnimationTrigger)
+        .filter((trigger): trigger is AnimationTrigger => Boolean(trigger)),
+    }),
+  );
+  return groups.length > 0 ? groups : undefined;
+}
+
 function parseKeyframes(element: Element | undefined): KeyframeAnimation | undefined {
   if (!element) {
     return undefined;
@@ -217,6 +240,9 @@ function parseModule(element: Element, pageContext: string): ModuleNode {
   const animationTrigger = parseAnimationTrigger(
     directChildren(element, "animation-trigger")[0],
   );
+  const animationGroups = parseAnimationGroups(
+    directChildren(element, "animation-groups")[0],
+  );
   const anchorXRaw = readAttr(element, "anchor-x");
   const anchorYRaw = readAttr(element, "anchor-y");
   const anchorX: AnchorX = anchorXRaw === "right" ? "right" : "left";
@@ -235,6 +261,7 @@ function parseModule(element: Element, pageContext: string): ModuleNode {
     ...(animations ? { animations } : {}),
     ...(keyframes ? { keyframes } : {}),
     ...(animationTrigger ? { animationTrigger } : {}),
+    ...(animationGroups ? { animationGroups } : {}),
   };
 }
 
@@ -260,6 +287,9 @@ function parsePage(element: Element): Page {
   const animationTrigger = parseAnimationTrigger(
     directChildren(element, "animation-trigger")[0],
   );
+  const animationGroups = parseAnimationGroups(
+    directChildren(element, "animation-groups")[0],
+  );
   const customScriptElement = directChildren(element, "custom-script")[0];
   const customScript = customScriptElement?.textContent ?? "";
   const scriptLanguage =
@@ -280,6 +310,7 @@ function parsePage(element: Element): Page {
     ...(animations ? { animations } : {}),
     ...(keyframes ? { keyframes } : {}),
     ...(animationTrigger ? { animationTrigger } : {}),
+    ...(animationGroups ? { animationGroups } : {}),
   };
 }
 
@@ -432,6 +463,30 @@ function serializeAnimationTrigger(
   return [`${pad}<animation-trigger${attrs} />`];
 }
 
+function serializeAnimationGroups(
+  groups: AnimationGroup[] | undefined,
+  level: number,
+): string[] {
+  if (!groups || groups.length === 0) {
+    return [];
+  }
+  const pad = indent(level);
+  const lines = [`${pad}<animation-groups>`];
+  for (const group of groups) {
+    lines.push(
+      `${pad}  <animation-group${attr("id", group.id)}${attr("name", group.name)}${group.enabled === false ? attr("enabled", "false") : ""}>`,
+    );
+    lines.push(...serializeAnimations(group.animations, level + 2));
+    lines.push(...serializeKeyframes(group.keyframes, level + 2));
+    for (const trigger of group.triggers) {
+      lines.push(...serializeAnimationTrigger(trigger, level + 2));
+    }
+    lines.push(`${pad}  </animation-group>`);
+  }
+  lines.push(`${pad}</animation-groups>`);
+  return lines;
+}
+
 function serializeKeyframes(
   config: KeyframeAnimation | undefined,
   level: number,
@@ -474,8 +529,12 @@ function serializeModule(module: ModuleNode, level: number): string[] {
   ];
   const childLines: string[] = [];
   childLines.push(...serializeKeyframes(module.keyframes, level + 1));
-  childLines.push(...serializeAnimations(module.animations, level + 1));
-  childLines.push(...serializeAnimationTrigger(module.animationTrigger, level + 1));
+  if (module.animationGroups?.length) {
+    childLines.push(...serializeAnimationGroups(module.animationGroups, level + 1));
+  } else {
+    childLines.push(...serializeAnimations(module.animations, level + 1));
+    childLines.push(...serializeAnimationTrigger(module.animationTrigger, level + 1));
+  }
   const entries = Object.entries(module.props);
   if (entries.length > 0) {
     childLines.push(`${pad}  <props>`);
@@ -499,8 +558,12 @@ function serializePage(page: Page, level: number): string[] {
     `${pad}<page${attr("id", page.id)}${attr("title", page.title)}${attr("width", page.width)}${attr("height", page.height)}${attr("grid", page.grid)}${attr("background", page.background)}>`,
   ];
   lines.push(...serializeKeyframes(page.keyframes, level + 1));
-  lines.push(...serializeAnimations(page.animations, level + 1));
-  lines.push(...serializeAnimationTrigger(page.animationTrigger, level + 1));
+  if (page.animationGroups?.length) {
+    lines.push(...serializeAnimationGroups(page.animationGroups, level + 1));
+  } else {
+    lines.push(...serializeAnimations(page.animations, level + 1));
+    lines.push(...serializeAnimationTrigger(page.animationTrigger, level + 1));
+  }
   if (page.customScript) {
     lines.push(
       `${pad}  <custom-script${attr("language", page.scriptLanguage === "typescript" ? "typescript" : "javascript")}>${wrapCdata(page.customScript)}</custom-script>`,

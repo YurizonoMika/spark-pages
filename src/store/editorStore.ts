@@ -8,6 +8,7 @@ import {
 } from "../model/defaults";
 import type {
   AnimationConfig,
+  AnimationGroup,
   AnimationTab,
   AnimationTrigger,
   KeyframeAnimation,
@@ -32,7 +33,12 @@ import {
   normalizeTrigger,
 } from "../model/animations";
 import {
-  DEFAULT_KEYFRAME_ANIMATION,
+  animationGroupById,
+  ensureAnimationGroups,
+  materializeAnimationGroups,
+  newAnimationGroup,
+} from "../model/animationGroups";
+import {
   keyframePropertyDefinition,
   normalizeKeyframeAnimation,
   valueAtTime,
@@ -104,6 +110,14 @@ export interface OpenProjectFile {
   savedContent: string;
 }
 
+export interface AnimationGroupPatch {
+  name?: string;
+  enabled?: boolean;
+  animations?: AnimationConfig;
+  keyframes?: KeyframeAnimation;
+  triggers?: AnimationTrigger[];
+}
+
 export type OpenDocument =
   | { kind: "page"; pageId: string }
   | { kind: "file"; path: string };
@@ -135,6 +149,7 @@ export interface EditorState {
   pageBuildOpen: boolean;
   animationDockOpen: boolean;
   animationTab: AnimationTab;
+  animationGroupId: string | null;
   animationTime: number;
   animationPlaying: boolean;
   projectPath: string | null;
@@ -193,34 +208,79 @@ export interface EditorState {
     id: string,
     edge: "left" | "right" | "top" | "bottom",
   ) => void;
-  setModuleAnimations: (id: string, patch: Partial<AnimationConfig>) => void;
-  setPageAnimations: (patch: Partial<AnimationConfig>) => void;
-  setModuleAnimationTrigger: (id: string, trigger: AnimationTrigger) => void;
-  setPageAnimationTrigger: (trigger: AnimationTrigger) => void;
+  setModuleAnimations: (
+    id: string,
+    patch: Partial<AnimationConfig>,
+    groupId?: string,
+  ) => void;
+  setPageAnimations: (
+    patch: Partial<AnimationConfig>,
+    groupId?: string,
+  ) => void;
+  setModuleAnimationTrigger: (
+    id: string,
+    trigger: AnimationTrigger,
+    groupId?: string,
+  ) => void;
+  setPageAnimationTrigger: (
+    trigger: AnimationTrigger,
+    groupId?: string,
+  ) => void;
+  setAnimationGroupTriggers: (
+    target: KeyframeTarget,
+    groupId: string,
+    triggers: AnimationTrigger[],
+  ) => void;
+  addAnimationGroup: (target: KeyframeTarget, name?: string) => string;
+  updateAnimationGroup: (
+    target: KeyframeTarget,
+    groupId: string,
+    patch: AnimationGroupPatch,
+  ) => void;
+  removeAnimationGroup: (target: KeyframeTarget, groupId: string) => void;
+  duplicateAnimationGroup: (
+    target: KeyframeTarget,
+    groupId: string,
+  ) => string | null;
+  setAnimationGroupId: (id: string | null) => void;
   groupHistorySince: (baseLength: number) => void;
   setAnimationDockOpen: (open: boolean) => void;
   setAnimationTab: (tab: AnimationTab) => void;
   setAnimationTime: (time: number) => void;
   setAnimationPlaying: (playing: boolean) => void;
-  addAnimationTrack: (property: KeyframeProperty, time: number) => void;
-  removeAnimationTrack: (property: KeyframeProperty) => void;
+  addAnimationTrack: (
+    property: KeyframeProperty,
+    time: number,
+    groupId?: string,
+  ) => void;
+  removeAnimationTrack: (
+    property: KeyframeProperty,
+    groupId?: string,
+  ) => void;
   setTargetKeyframes: (
     target: KeyframeTarget,
     config: KeyframeAnimation,
+    groupId?: string,
   ) => void;
   addKeyframe: (
     property: KeyframeProperty,
     time: number,
     value?: number,
+    groupId?: string,
   ) => void;
   updateKeyframe: (
     property: KeyframeProperty,
     id: string,
     patch: Partial<{ time: number; value: number; easing: string }>,
+    groupId?: string,
   ) => void;
-  removeKeyframe: (property: KeyframeProperty, id: string) => void;
-  setKeyframeDuration: (duration: number) => void;
-  setKeyframeLoop: (loop: boolean) => void;
+  removeKeyframe: (
+    property: KeyframeProperty,
+    id: string,
+    groupId?: string,
+  ) => void;
+  setKeyframeDuration: (duration: number, groupId?: string) => void;
+  setKeyframeLoop: (loop: boolean, groupId?: string) => void;
   setProjectSettings: (patch: ProjectSettingsPatch) => void;
   setTheme: (patch: Partial<Theme>) => void;
   setActivePage: (id: string) => void;
@@ -260,6 +320,53 @@ function activePageOf(project: Project, activePageId: string): Page {
 
 export function selectActivePage(state: EditorState): Page {
   return activePageOf(state.project, state.activePageId);
+}
+
+type AnimationTargetLike =
+  | KeyframeTarget
+  | AnimationTarget
+  | { kind: "page" }
+  | { kind: "module"; moduleId?: string; module?: { id: string } };
+
+function animationHostOf(
+  page: Page,
+  target: AnimationTargetLike,
+): Page | ModuleNode | undefined {
+  if (target.kind === "page") {
+    return page;
+  }
+  const moduleId =
+    "moduleId" in target ? target.moduleId : target.module?.id;
+  return page.modules.find((module) => module.id === moduleId);
+}
+
+function animationGroupIn(
+  host: Page | ModuleNode,
+  groupId?: string,
+): AnimationGroup {
+  const groups = ensureAnimationGroups(host);
+  return (
+    (groupId ? groups.find((group) => group.id === groupId) : undefined) ??
+    groups[0]
+  );
+}
+
+function writeTargetKeyframes(
+  get: () => EditorState,
+  target: AnimationTargetLike,
+  groupId: string | undefined,
+  next: KeyframeAnimation,
+): void {
+  get().commit((draft) => {
+    const page = activePageOf(draft, get().activePageId);
+    const host = animationHostOf(page, target);
+    if (host) {
+      animationGroupIn(host, groupId).keyframes = next;
+      if (!groupId) {
+        host.keyframes = next;
+      }
+    }
+  });
 }
 
 function pageDocument(pageId: string): OpenDocument {
@@ -454,6 +561,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   pageBuildOpen: false,
   animationDockOpen: false,
   animationTab: "keyframes",
+  animationGroupId: null,
   animationTime: 0,
   animationPlaying: false,
   projectPath: restored?.projectPath ?? null,
@@ -985,31 +1093,39 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     });
   },
 
-  setModuleAnimations(id, patch) {
+  setModuleAnimations(id, patch, groupId) {
     get().commit((draft) => {
       const page = activePageOf(draft, get().activePageId);
       const module = page.modules.find((candidate) => candidate.id === id);
       if (!module) {
         return;
       }
-      module.animations = normalizeAnimation({
-        ...(module.animations ?? DEFAULT_ANIMATION),
+      const group = animationGroupIn(module, groupId);
+      group.animations = normalizeAnimation({
+        ...(group.animations ?? DEFAULT_ANIMATION),
         ...patch,
       });
+      if (!groupId) {
+        module.animations = group.animations;
+      }
     });
   },
 
-  setPageAnimations(patch) {
+  setPageAnimations(patch, groupId) {
     get().commit((draft) => {
       const page = activePageOf(draft, get().activePageId);
-      page.animations = normalizeAnimation({
-        ...(page.animations ?? DEFAULT_ANIMATION),
+      const group = animationGroupIn(page, groupId);
+      group.animations = normalizeAnimation({
+        ...(group.animations ?? DEFAULT_ANIMATION),
         ...patch,
       });
+      if (!groupId) {
+        page.animations = group.animations;
+      }
     });
   },
 
-  setModuleAnimationTrigger(id, trigger) {
+  setModuleAnimationTrigger(id, trigger, groupId) {
     const normalized = normalizeTrigger(trigger);
     get().commit((draft) => {
       const page = activePageOf(draft, get().activePageId);
@@ -1017,24 +1133,132 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       if (!module) {
         return;
       }
-      if (hasAnimationTrigger(normalized)) {
-        module.animationTrigger = normalized;
-      } else {
-        delete module.animationTrigger;
+      const group = animationGroupIn(module, groupId);
+      group.triggers = hasAnimationTrigger(normalized) ? [normalized] : [];
+      if (!groupId) {
+        module.animationTrigger = hasAnimationTrigger(normalized)
+          ? normalized
+          : undefined;
       }
     });
   },
 
-  setPageAnimationTrigger(trigger) {
+  setPageAnimationTrigger(trigger, groupId) {
     const normalized = normalizeTrigger(trigger);
     get().commit((draft) => {
       const page = activePageOf(draft, get().activePageId);
-      if (hasAnimationTrigger(normalized)) {
-        page.animationTrigger = normalized;
-      } else {
-        delete page.animationTrigger;
+      const group = animationGroupIn(page, groupId);
+      group.triggers = hasAnimationTrigger(normalized) ? [normalized] : [];
+      if (!groupId) {
+        page.animationTrigger = hasAnimationTrigger(normalized)
+          ? normalized
+          : undefined;
       }
     });
+  },
+
+  setAnimationGroupTriggers(target, groupId, triggers) {
+    get().commit((draft) => {
+      const page = activePageOf(draft, get().activePageId);
+      const host = animationHostOf(page, target);
+      if (!host) {
+        return;
+      }
+      const group = animationGroupIn(host, groupId);
+      group.triggers = triggers
+        .map((trigger) => normalizeTrigger(trigger))
+        .filter(hasAnimationTrigger);
+    });
+  },
+
+  addAnimationGroup(target, name) {
+    const group = newAnimationGroup(name ?? "动画");
+    get().commit((draft) => {
+      const page = activePageOf(draft, get().activePageId);
+      const host = animationHostOf(page, target);
+      if (!host) {
+        return;
+      }
+      const groups = materializeAnimationGroups(host);
+      if (!name) {
+        group.name = `动画 ${groups.length + 1}`;
+      }
+      groups.push(group);
+    });
+    return group.id;
+  },
+
+  updateAnimationGroup(target, groupId, patch) {
+    get().commit((draft) => {
+      const page = activePageOf(draft, get().activePageId);
+      const host = animationHostOf(page, target);
+      if (!host) {
+        return;
+      }
+      const group = animationGroupIn(host, groupId);
+      if (patch.name !== undefined) {
+        group.name = patch.name.trim() || group.name;
+      }
+      if (patch.enabled !== undefined) {
+        group.enabled = patch.enabled;
+      }
+      if (patch.animations !== undefined) {
+        group.animations = normalizeAnimation(patch.animations);
+      }
+      if (patch.keyframes !== undefined) {
+        group.keyframes = normalizeKeyframeAnimation(patch.keyframes);
+      }
+      if (patch.triggers !== undefined) {
+        group.triggers = patch.triggers
+          .map((trigger) => normalizeTrigger(trigger))
+          .filter(hasAnimationTrigger);
+      }
+    });
+  },
+
+  removeAnimationGroup(target, groupId) {
+    get().commit((draft) => {
+      const page = activePageOf(draft, get().activePageId);
+      const host = animationHostOf(page, target);
+      if (!host) {
+        return;
+      }
+      const groups = ensureAnimationGroups(host);
+      host.animationGroups = groups.filter(
+        (group) => group.id !== groupId,
+      );
+    });
+    if (get().animationGroupId === groupId) {
+      set({ animationGroupId: null });
+    }
+  },
+
+  duplicateAnimationGroup(target, groupId) {
+    const state = get();
+    const page = activePageOf(state.project, state.activePageId);
+    const host = animationHostOf(page, target);
+    const source = host ? animationGroupById(host, groupId) : undefined;
+    if (!host || !source || source.id !== groupId) {
+      return null;
+    }
+    const copy = structuredClone(source);
+    copy.id = `anim_${Math.random().toString(36).slice(2, 12)}`;
+    copy.name = `${source.name} 副本`;
+    get().commit((draft) => {
+      const draftPage = activePageOf(draft, state.activePageId);
+      const draftHost = animationHostOf(draftPage, target);
+      if (!draftHost) {
+        return;
+      }
+      const groups = ensureAnimationGroups(draftHost);
+      const index = groups.findIndex((group) => group.id === groupId);
+      groups.splice(index >= 0 ? index + 1 : groups.length, 0, copy);
+    });
+    return copy.id;
+  },
+
+  setAnimationGroupId(id) {
+    set({ animationGroupId: id });
   },
 
   groupHistorySince(baseLength) {
@@ -1057,22 +1281,23 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   setAnimationTime(time) {
     const state = get();
     const target = animationTargetOf(state);
-    const duration =
-      target.module?.keyframes?.duration ??
-      target.page.keyframes?.duration ??
-      DEFAULT_KEYFRAME_ANIMATION.duration;
-    set({ animationTime: clamp(time, 0, duration) });
+    const host = target.module ?? target.page;
+    const config = normalizeKeyframeAnimation(
+      animationGroupById(host, state.animationGroupId ?? undefined)?.keyframes,
+    );
+    set({ animationTime: clamp(time, 0, config.duration) });
   },
 
   setAnimationPlaying(playing) {
     set({ animationPlaying: playing });
   },
 
-  addAnimationTrack(property, time) {
+  addAnimationTrack(property, time, groupId) {
     const state = get();
     const target = animationTargetOf(state);
+    const host = target.module ?? target.page;
     const config = normalizeKeyframeAnimation(
-      target.module?.keyframes ?? target.page.keyframes,
+      animationGroupById(host, groupId)?.keyframes,
     );
     if ((config.tracks[property]?.length ?? 0) > 0) {
       return;
@@ -1093,68 +1318,37 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         ],
       },
     };
-    get().commit((draft) => {
-      const page = activePageOf(draft, state.activePageId);
-      if (state.selection.length === 1) {
-        const module = page.modules.find(
-          (candidate) => candidate.id === state.selection[0],
-        );
-        if (module) {
-          module.keyframes = next;
-          return;
-        }
-      }
-      page.keyframes = next;
-    });
+    writeTargetKeyframes(
+      get,
+      target,
+      groupId,
+      next,
+    );
   },
 
-  removeAnimationTrack(property) {
+  removeAnimationTrack(property, groupId) {
     const state = get();
     const target = animationTargetOf(state);
-    const config = target.module?.keyframes ?? target.page.keyframes;
+    const host = target.module ?? target.page;
+    const config = animationGroupById(host, groupId)?.keyframes;
     if (!config) {
       return;
     }
     const tracks = { ...config.tracks };
     delete tracks[property];
-    const next: KeyframeAnimation = { ...config, tracks };
-    get().commit((draft) => {
-      const page = activePageOf(draft, state.activePageId);
-      if (state.selection.length === 1) {
-        const module = page.modules.find(
-          (candidate) => candidate.id === state.selection[0],
-        );
-        if (module) {
-          module.keyframes = next;
-          return;
-        }
-      }
-      page.keyframes = next;
-    });
+    writeTargetKeyframes(get, target, groupId, { ...config, tracks });
   },
 
-  setTargetKeyframes(target, config) {
-    get().commit((draft) => {
-      const page = activePageOf(draft, get().activePageId);
-      const next = normalizeKeyframeAnimation(config);
-      if (target.kind === "page") {
-        page.keyframes = next;
-        return;
-      }
-      const module = page.modules.find(
-        (candidate) => candidate.id === target.moduleId,
-      );
-      if (module) {
-        module.keyframes = next;
-      }
-    });
+  setTargetKeyframes(target, config, groupId) {
+    writeTargetKeyframes(get, target, groupId, normalizeKeyframeAnimation(config));
   },
 
-  addKeyframe(property, time, value) {
+  addKeyframe(property, time, value, groupId) {
     const state = get();
     const target = animationTargetOf(state);
+    const host = target.module ?? target.page;
     const config = normalizeKeyframeAnimation(
-      target.module?.keyframes ?? target.page.keyframes,
+      animationGroupById(host, groupId)?.keyframes,
     );
     const definition = keyframePropertyDefinition(property);
     const safeTime = clamp(Math.round(time), 0, config.duration);
@@ -1181,25 +1375,14 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         ].sort((a, b) => a.time - b.time),
       },
     };
-    get().commit((draft) => {
-      const page = activePageOf(draft, state.activePageId);
-      if (state.selection.length === 1) {
-        const module = page.modules.find(
-          (candidate) => candidate.id === state.selection[0],
-        );
-        if (module) {
-          module.keyframes = next;
-          return;
-        }
-      }
-      page.keyframes = next;
-    });
+    writeTargetKeyframes(get, target, groupId, next);
   },
 
-  updateKeyframe(property, id, patch) {
+  updateKeyframe(property, id, patch, groupId) {
     const state = get();
     const target = animationTargetOf(state);
-    const config = target.module?.keyframes ?? target.page.keyframes;
+    const host = target.module ?? target.page;
+    const config = animationGroupById(host, groupId)?.keyframes;
     if (!config) {
       return;
     }
@@ -1232,25 +1415,14 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
           .sort((a, b) => a.time - b.time),
       },
     };
-    get().commit((draft) => {
-      const page = activePageOf(draft, state.activePageId);
-      if (state.selection.length === 1) {
-        const module = page.modules.find(
-          (candidate) => candidate.id === state.selection[0],
-        );
-        if (module) {
-          module.keyframes = next;
-          return;
-        }
-      }
-      page.keyframes = next;
-    });
+    writeTargetKeyframes(get, target, groupId, next);
   },
 
-  removeKeyframe(property, id) {
+  removeKeyframe(property, id, groupId) {
     const state = get();
     const target = animationTargetOf(state);
-    const config = target.module?.keyframes ?? target.page.keyframes;
+    const host = target.module ?? target.page;
+    const config = animationGroupById(host, groupId)?.keyframes;
     if (!config) {
       return;
     }
@@ -1264,64 +1436,30 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         [property]: track,
       },
     };
-    get().commit((draft) => {
-      const page = activePageOf(draft, state.activePageId);
-      if (state.selection.length === 1) {
-        const module = page.modules.find(
-          (candidate) => candidate.id === state.selection[0],
-        );
-        if (module) {
-          module.keyframes = next;
-          return;
-        }
-      }
-      page.keyframes = next;
-    });
+    writeTargetKeyframes(get, target, groupId, next);
   },
 
-  setKeyframeDuration(duration) {
+  setKeyframeDuration(duration, groupId) {
     const state = get();
     const target = animationTargetOf(state);
+    const host = target.module ?? target.page;
     const config = normalizeKeyframeAnimation({
-      ...(target.module?.keyframes ?? target.page.keyframes),
+      ...(animationGroupById(host, groupId)?.keyframes),
       duration,
     });
-    get().commit((draft) => {
-      const page = activePageOf(draft, state.activePageId);
-      if (state.selection.length === 1) {
-        const module = page.modules.find(
-          (candidate) => candidate.id === state.selection[0],
-        );
-        if (module) {
-          module.keyframes = config;
-          return;
-        }
-      }
-      page.keyframes = config;
-    });
+    writeTargetKeyframes(get, target, groupId, config);
     set({ animationTime: clamp(get().animationTime, 0, config.duration) });
   },
 
-  setKeyframeLoop(loop) {
+  setKeyframeLoop(loop, groupId) {
     const state = get();
     const target = animationTargetOf(state);
+    const host = target.module ?? target.page;
     const config = normalizeKeyframeAnimation({
-      ...(target.module?.keyframes ?? target.page.keyframes),
+      ...(animationGroupById(host, groupId)?.keyframes),
       loop,
     });
-    get().commit((draft) => {
-      const page = activePageOf(draft, state.activePageId);
-      if (state.selection.length === 1) {
-        const module = page.modules.find(
-          (candidate) => candidate.id === state.selection[0],
-        );
-        if (module) {
-          module.keyframes = config;
-          return;
-        }
-      }
-      page.keyframes = config;
-    });
+    writeTargetKeyframes(get, target, groupId, config);
   },
 
   setProjectSettings(patch) {

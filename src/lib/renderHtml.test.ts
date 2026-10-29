@@ -51,6 +51,58 @@ describe("renderPageHtml", () => {
     expect(html).toContain("Spark 动画触发条件执行失败");
   });
 
+  it("renders multiple independent animation groups", () => {
+    const project = defaultProject();
+    const page = project.pages[0];
+    const module = page.modules[0];
+    module.animationGroups = [
+      {
+        id: "anim_click",
+        name: "点击",
+        enabled: true,
+        animations: {
+          entrance: "fade-in",
+          loop: "",
+          exit: "",
+          duration: 400,
+          delay: 0,
+          exitDelay: 1000,
+          easing: "ease-out",
+        },
+        triggers: [{ type: "click" }],
+      },
+      {
+        id: "anim_hover",
+        name: "悬停",
+        enabled: true,
+        keyframes: {
+          duration: 800,
+          loop: false,
+          tracks: {
+            opacity: [{ id: "kf1", time: 0, value: 1, easing: "linear" }],
+          },
+        },
+        triggers: [
+          { type: "hover" },
+          {
+            type: "condition",
+            moduleId: module.id,
+            property: "value",
+            operator: "gt",
+            value: "1",
+          },
+        ],
+      },
+    ];
+
+    const html = renderPageHtml(page, project);
+
+    expect(html.match(/data-spark-anim-triggers="/g)).toHaveLength(2);
+    expect(html).toContain('&quot;type&quot;:&quot;hover&quot;');
+    expect(html).toContain("spark-kf-");
+    expect(html).toContain("Spark 动画触发条件执行失败");
+  });
+
   it("adds the wand bridge only in preview mode", () => {
     const project = defaultProject();
     const page = project.pages[0];

@@ -53,9 +53,10 @@ const PAGE_REQUIREMENTS = `页面与视觉要求：
 1. 保留 XML 中所有文案、模块内容、视觉层级、主题色、字体感觉、圆角、间距和页面尺寸意图。
 2. 不要机械复刻 XML 的绝对坐标；使用响应式/流式布局，同时保持设计意图。
 3. 如果 XML 中存在 <animations>，使用 CSS/JS 实现出场、循环和离场动画，并保留 duration、delay、exit-delay、easing。
+   如果存在 <animation-groups>，每个 <animation-group> 是一组独立动画（各自可有 animations、keyframes 和多个 trigger）；enabled="false" 的组不要播放。
 4. 如果 XML 中存在 <keyframes>，按轨道实现关键帧动画，保留 duration、loop、时间点、值和缓动；x/y 使用 translate，scale 使用 scale，rotate 使用 rotate，opacity 使用 opacity，blur/brightness/saturate 使用 filter。
 5. anchor-x="right" / anchor-y="bottom" 表示相对页面右/下边缘定位，布局时保持这种参照关系。
-6. 如果 XML 中存在 <animation-trigger>，动画必须在触发条件满足后才播放：click 绑定点击，hover 绑定 mouseenter，condition 监视指定组件值并按大于/等于/小于比较，custom 执行 code 并读取返回的布尔值；未触发前保持动画初始状态。条件值为 input/textarea/select 时读取控件 value。
+6. 每个 <animation-group> 内的 <animation-trigger> 相互独立，任一条件满足即可播放该组；如果 XML 中存在 <animation-trigger>，动画必须在触发条件满足后才播放：click 绑定点击，hover 绑定 mouseenter，condition 监视指定组件值并按大于/等于/小于比较，custom 执行 code 并读取返回的布尔值；未触发前保持动画初始状态。条件值为 input/textarea/select 时读取控件 value。
 7. 页面脚本必须完整保留并实际执行：不能省略、截断、改写成占位注释或只保留 TODO。
    - HTML 项目：每个有脚本的页面写入 pages/<slug>/script.js，并在页面 HTML 中用 <script src="./script.js" defer></script> 引用；如果脚本语言是 TypeScript，需转写为行为等价的 JavaScript。
    - Vue 项目：完整写入对应页面的 <script setup lang="ts"> 或同目录 logic.ts，并在组件中实际执行。
