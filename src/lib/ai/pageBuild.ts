@@ -144,7 +144,7 @@ ${pageFileRules(project, directory)}
 2. 不要机械复刻 XML 的绝对坐标；使用响应式/流式布局，同时保持设计意图。
 3. 实现 XML 中的 animations、keyframes、animation-groups、animation-trigger、anchor-x/anchor-y 和 custom-script。多个 <animation-group> 是相互独立的动画时间轴和触发条件，不能合并或丢弃；enabled="false" 的组不要播放。页面脚本必须完整保留并实际执行，不能省略、截断或只留 TODO；HTML 项目写入 script.js（TypeScript 转写为等价 JavaScript），Vue 项目写入 <script setup lang="ts"> 或 logic.ts。
    animation-trigger 必须控制动画播放时机：click 绑定点击，hover 绑定 mouseenter，condition 监视指定组件值并按大于/等于/小于比较，custom 执行 code 并读取布尔返回值；未触发前保持动画初始状态。
-4. core.image 模块的 src 已经指向页面目录下的 ./assets/images/ 真实构建资源，必须原样使用该路径，不要替换成占位图、外链或 data URL，也不要删除图片；其他本地资源不要引用不存在的文件。
+4. core.image / core.avatar 模块的 src 已经指向页面目录下的 ./assets/images/ 真实构建资源，必须原样使用该路径，不要替换成占位图、外链或 data URL，也不要删除图片；其他本地资源不要引用不存在的文件。
 5. 页面应当响应式、可访问、无控制台错误。
 6. 当前页面 slug 为 ${slug}，项目类型是 ${projectTypeLabel(project)}。`;
 }

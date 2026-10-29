@@ -73,7 +73,21 @@ const FIELD_GROUP_ORDER: ModuleFieldGroup[] = [
   "interaction",
 ];
 
-const CONTENT_KEYS = new Set(["text", "src", "alt", "label", "placeholder"]);
+const CONTENT_KEYS = new Set([
+  "text",
+  "src",
+  "alt",
+  "label",
+  "placeholder",
+  "eyebrow",
+  "title",
+  "description",
+  "items",
+  "author",
+  "options",
+  "fallback",
+  "poster",
+]);
 const TYPOGRAPHY_KEYS = new Set([
   "fontFamily",
   "fontSize",
@@ -85,6 +99,7 @@ const TYPOGRAPHY_KEYS = new Set([
   "size",
   "labelFontSize",
   "labelFontWeight",
+  "titleSize",
 ]);
 const APPEARANCE_KEYS = new Set([
   "color",
@@ -97,8 +112,23 @@ const APPEARANCE_KEYS = new Set([
   "fit",
   "thickness",
   "variant",
+  "trackColor",
+  "shadow",
+  "shape",
+  "padding",
+  "paddingX",
+  "paddingY",
+  "height",
 ]);
-const INTERACTION_KEYS = new Set(["href", "inputType"]);
+const INTERACTION_KEYS = new Set([
+  "href",
+  "inputType",
+  "controls",
+  "autoplay",
+  "muted",
+  "loop",
+  "checked",
+]);
 
 function fieldGroup(field: ModuleField): ModuleFieldGroup {
   if (field.group) {
@@ -323,7 +353,10 @@ function TextControl({
     (state) => state.updateModulePropsTransient,
   );
 
-  if (module.type === "core.image" && field.key === "src") {
+  if (
+    (module.type === "core.image" || module.type === "core.avatar") &&
+    field.key === "src"
+  ) {
     return <ImageSourceControl module={module} field={field} />;
   }
 

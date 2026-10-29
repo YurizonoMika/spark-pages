@@ -56,7 +56,7 @@ export function extractBuildAssets(project: Project): ExtractedBuildAssets {
       slugs.get(page.id) ?? page.id,
     );
     for (const module of page.modules) {
-      if (module.type !== "core.image") {
+      if (module.type !== "core.image" && module.type !== "core.avatar") {
         continue;
       }
       const src = module.props.src;

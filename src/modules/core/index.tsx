@@ -19,6 +19,7 @@ import {
   type ModuleRenderContext,
 } from "../types";
 import { registerModules } from "../registry";
+import { extraModules } from "./extra";
 
 const headingSizes: Record<number, number> = { 1: 56, 2: 40, 3: 30 };
 const textSizes: Record<string, number> = { sm: 14, md: 16, lg: 20 };
@@ -915,6 +916,7 @@ registerModules([
   spacer,
   box,
   input,
+  ...extraModules,
 ]);
 
 export {
@@ -927,3 +929,17 @@ export {
   box,
   input,
 };
+
+export {
+  card,
+  link,
+  badge,
+  avatar,
+  video,
+  list,
+  quote,
+  progress,
+  textarea,
+  select,
+  checkbox,
+} from "./extra";

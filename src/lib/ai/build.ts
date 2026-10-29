@@ -60,7 +60,7 @@ const PAGE_REQUIREMENTS = `页面与视觉要求：
 7. 页面脚本必须完整保留并实际执行：不能省略、截断、改写成占位注释或只保留 TODO。
    - HTML 项目：每个有脚本的页面写入 pages/<slug>/script.js，并在页面 HTML 中用 <script src="./script.js" defer></script> 引用；如果脚本语言是 TypeScript，需转写为行为等价的 JavaScript。
    - Vue 项目：完整写入对应页面的 <script setup lang="ts"> 或同目录 logic.ts，并在组件中实际执行。
-8. core.image 模块的 src 已经指向页面目录下的 ./assets/images/ 真实构建资源，必须原样使用该路径，不要替换成占位图、外链或 data URL，也不要删除图片。
+8. core.image / core.avatar 模块的 src 已经指向页面目录下的 ./assets/images/ 真实构建资源，必须原样使用该路径，不要替换成占位图、外链或 data URL，也不要删除图片。
 9. 除上述构建图片外，不要引用不存在的本地资源；其他图片可以使用占位图、CDN 或内联 SVG。
 10. 页面应当响应式、可访问、无控制台错误。`;
 
