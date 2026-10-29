@@ -115,6 +115,10 @@ async function readManifestProject(
   const manifest = parseProjectManifest(await readText(manifestPath));
   const pages: Page[] = [];
   for (const entry of manifest.pages) {
+    if (!/^pages\/[^/]+\.spark$/i.test(entry.file)) {
+      console.warn(`忽略不安全的页面路径 ${entry.file}`);
+      continue;
+    }
     try {
       const parsed = parseProjectXml(
         await readText(joinPath(folder, entry.file)),
