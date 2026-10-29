@@ -84,10 +84,10 @@ export function TopBar({ actions }: TopBarProps) {
   const undo = useEditorStore((state) => state.undo);
   const redo = useEditorStore((state) => state.redo);
 
-  const fileName = projectPath
-    ? projectPath.split(/[\\/]/).pop()
-    : projectFolder
-      ? projectFolder.replace(/[\\/]+$/, "").split(/[\\/]/).pop()
+  const fileName = projectFolder
+    ? projectFolder.replace(/[\\/]+$/, "").split(/[\\/]/).pop()
+    : projectPath
+      ? projectPath.split(/[\\/]/).pop()
       : undefined;
   const fileDocument = Boolean(activeFilePath);
   const pageTabOpen = useEditorStore((state) =>

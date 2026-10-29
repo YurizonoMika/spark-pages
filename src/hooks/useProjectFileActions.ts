@@ -1,16 +1,26 @@
 import { useCallback, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useEditorStore, selectActivePage } from "../store/editorStore";
-import { toast } from "../store/toastStore";
 import {
-  confirmDiscardChanges,
-  writeProjectFile,
-} from "../lib/projectFiles";
+  useEditorStore,
+  selectActivePage,
+} from "../store/editorStore";
+import { toast } from "../store/toastStore";
+import { confirmDiscardChanges } from "../lib/projectFiles";
 import { listProjectFiles } from "../lib/ai/build";
+import {
+  pageFileMap,
+} from "../lib/ai/projectContext";
 import { parseProjectXml, serializeProject } from "../xml/projectXml";
-import { pageXmlPath } from "../lib/ai/projectContext";
-import { defaultProject } from "../model/defaults";
+import {
+  PROJECT_MANIFEST_FILE,
+  parseProjectManifest,
+  projectFromManifest,
+  serializeProjectManifest,
+} from "../xml/projectManifest";
+import { createEmptyPage, defaultProject } from "../model/defaults";
+import type { Page, Project } from "../model/types";
+import type { ProjectFileEntry } from "../lib/ai/build";
 
 function joinPath(folder: string, name: string): string {
   return `${folder.replace(/[\\/]+$/, "")}/${name}`;
@@ -34,13 +44,170 @@ function folderName(folder: string): string {
   );
 }
 
-function projectPathInFolder(folder: string, projectName: string): string {
-  const cleaned = projectName
-    .replace(/[\\/:*?"<>|]+/g, "-")
-    .replace(/\s+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64);
-  return joinPath(folder, `${cleaned || "spark-pages"}.spark`);
+function relativeProjectPath(folder: string, path: string): string {
+  const normalizedFolder = folder.replaceAll("\\", "/").replace(/\/+$/, "");
+  const normalizedPath = path.replaceAll("\\", "/");
+  if (normalizedPath.startsWith(`${normalizedFolder}/`)) {
+    return normalizedPath.slice(normalizedFolder.length + 1);
+  }
+  return normalizedPath.split("/").pop() ?? normalizedPath;
+}
+
+async function readText(path: string): Promise<string> {
+  return invoke<string>("read_text_file", { path });
+}
+
+async function writeText(path: string, content: string): Promise<void> {
+  await invoke("write_text_file", { path, content });
+}
+
+function projectWithFiles(project: Project): Project {
+  const files = pageFileMap(project);
+  return {
+    ...project,
+    pages: project.pages.map((page) => ({
+      ...page,
+      file: files.get(page.id) ?? page.file,
+    })),
+  };
+}
+
+async function writePageFile(
+  folder: string,
+  project: Project,
+  page: Page,
+  file: string,
+): Promise<void> {
+  const content = serializeProject({
+    ...projectWithFiles(project),
+    pages: [page],
+  });
+  await writeText(joinPath(folder, file), content);
+}
+
+async function writeManifest(
+  folder: string,
+  project: Project,
+): Promise<string> {
+  const path = joinPath(folder, PROJECT_MANIFEST_FILE);
+  await writeText(path, serializeProjectManifest(projectWithFiles(project)));
+  return path;
+}
+
+async function writeWholeProject(
+  folder: string,
+  project: Project,
+): Promise<string> {
+  const files = pageFileMap(project);
+  for (const page of project.pages) {
+    const file = files.get(page.id);
+    if (file) {
+      await writePageFile(folder, project, page, file);
+    }
+  }
+  return writeManifest(folder, project);
+}
+
+async function readManifestProject(
+  folder: string,
+  manifestPath: string,
+): Promise<Project> {
+  const manifest = parseProjectManifest(await readText(manifestPath));
+  const pages: Page[] = [];
+  for (const entry of manifest.pages) {
+    try {
+      const parsed = parseProjectXml(
+        await readText(joinPath(folder, entry.file)),
+      );
+      const page = parsed.pages[0];
+      if (page) {
+        page.file = entry.file;
+        pages.push(page);
+      }
+    } catch (error) {
+      console.warn(`无法读取页面文件 ${entry.file}`, error);
+    }
+  }
+  if (pages.length === 0) {
+    const page = createEmptyPage("首页");
+    page.file = "pages/首页.spark";
+    pages.push(page);
+  }
+  return projectFromManifest(manifest, pages);
+}
+
+async function readLegacyProject(path: string): Promise<Project> {
+  const project = parseProjectXml(await readText(path));
+  const files = pageFileMap(project);
+  return {
+    ...project,
+    pages: project.pages.map((page) => ({
+      ...page,
+      file: files.get(page.id),
+    })),
+  };
+}
+
+async function readDiscoveredPages(
+  folder: string,
+  entries: ProjectFileEntry[],
+): Promise<{ project: Project; pages: Page[] } | null> {
+  const pageEntries = entries.filter(
+    (entry) =>
+      !entry.isDir && /^pages\/[^/]+\.spark$/i.test(entry.path),
+  );
+  if (pageEntries.length === 0) {
+    return null;
+  }
+  const pages: Page[] = [];
+  let firstProject: Project | null = null;
+  for (const entry of pageEntries.sort((a, b) =>
+    a.path.localeCompare(b.path),
+  )) {
+    try {
+      const parsed = parseProjectXml(
+        await readText(joinPath(folder, entry.path)),
+      );
+      const page = parsed.pages[0];
+      if (!page) {
+        continue;
+      }
+      page.file = entry.path;
+      pages.push(page);
+      firstProject ??= parsed;
+    } catch (error) {
+      console.warn(`无法读取页面文件 ${entry.path}`, error);
+    }
+  }
+  if (pages.length === 0) {
+    return null;
+  }
+  const project = defaultProject();
+  project.name = folderName(folder);
+  project.pages = pages;
+  if (firstProject) {
+    project.type = firstProject.type;
+    project.template = firstProject.template;
+    project.theme = firstProject.theme;
+  }
+  return { project, pages };
+}
+
+function installProject(
+  project: Project,
+  folder: string,
+  manifestPath: string,
+): void {
+  const store = useEditorStore.getState();
+  store.loadProject(project, manifestPath);
+  store.setProjectFolder(folder);
+  const files = Object.fromEntries(
+    project.pages
+      .filter((page) => page.file)
+      .map((page) => [page.id, page.file as string]),
+  );
+  store.setPageFiles(files);
+  store.bumpFilesVersion();
 }
 
 export function useProjectFileActions() {
@@ -98,27 +265,50 @@ export function useProjectFileActions() {
       setBusy(true);
       const folder = selected;
       const entries = await listProjectFiles(folder);
-      const projectFile = entries.find(
+      const manifestEntry = entries.find(
+        (entry) => !entry.isDir && entry.path === PROJECT_MANIFEST_FILE,
+      );
+
+      if (manifestEntry) {
+        const manifestPath = joinPath(folder, manifestEntry.path);
+        const project = await readManifestProject(folder, manifestPath);
+        installProject(project, folder, manifestPath);
+        toast(`项目已打开，共 ${project.pages.length} 个页面`, "success");
+        return;
+      }
+
+      const legacyEntry = entries.find(
         (entry) =>
           !entry.isDir &&
           !entry.path.includes("/") &&
           entry.path.toLowerCase().endsWith(".spark"),
       );
-      if (projectFile) {
-        const path = joinPath(folder, projectFile.path);
-        const content = await invoke<string>("read_text_file", { path });
-        const project = parseProjectXml(content);
-        useEditorStore.getState().loadProject(project, path);
-        toast("项目已打开", "success");
-      } else {
-        const project = defaultProject();
-        project.name = folderName(folder);
-        const store = useEditorStore.getState();
-        store.loadProject(project, null);
-        store.setProjectFolder(folder);
-        toast("已打开文件夹", "success");
+      if (legacyEntry) {
+        const legacyPath = joinPath(folder, legacyEntry.path);
+        const project = await readLegacyProject(legacyPath);
+        const manifestPath = await writeWholeProject(folder, project);
+        installProject(projectWithFiles(project), folder, manifestPath);
+        toast(
+          `已迁移为文件夹项目（${project.pages.length} 个页面，原文件已保留）`,
+          "success",
+        );
+        return;
       }
-      useEditorStore.getState().bumpFilesVersion();
+
+      const discovered = await readDiscoveredPages(folder, entries);
+      if (discovered) {
+        const manifestPath = await writeManifest(folder, discovered.project);
+        installProject(discovered.project, folder, manifestPath);
+        toast(`项目已打开，共 ${discovered.pages.length} 个页面`, "success");
+        return;
+      }
+
+      const project = defaultProject();
+      project.name = folderName(folder);
+      const manifestPath = await writeWholeProject(folder, project);
+      installProject(projectWithFiles(project), folder, manifestPath);
+      toast("已在文件夹中创建新项目", "success");
+      return;
     } catch (error) {
       toast(
         error instanceof Error ? error.message : "无法打开文件夹",
@@ -133,16 +323,29 @@ export function useProjectFileActions() {
     const state = useEditorStore.getState();
     setBusy(true);
     try {
-      const content = await invoke<string>("read_text_file", { path });
-      const project = parseProjectXml(content);
-      const isPageFile =
-        path.replaceAll("\\", "/").split("/").pop()?.toLowerCase() ===
-          "page.spark" && project.pages.length === 1;
-      if (isPageFile) {
-        useEditorStore.getState().replacePage(project.pages[0]);
-        toast("页面已加载", "success");
+      const content = await readText(path);
+      const parsed = parseProjectXml(content);
+      const folder = state.projectFolder ?? folderOfPath(path);
+      const fileName = path.replaceAll("\\", "/").split("/").pop() ?? "";
+
+      if (parsed.pages.length === 1 && fileName !== PROJECT_MANIFEST_FILE) {
+        const page = parsed.pages[0];
+        if (folder) {
+          page.file = relativeProjectPath(folder, path);
+        }
+        useEditorStore.getState().replacePage(page);
+        if (folder && page.file) {
+          useEditorStore.getState().setPageFiles({
+            [page.id]: page.file,
+          });
+          const project = useEditorStore.getState().project;
+          await writeManifest(folder, project);
+        }
+        useEditorStore.getState().bumpFilesVersion();
+        toast(`页面「${page.title}」已加载`, "success");
         return;
       }
+
       if (
         state.openFiles.some(
           (file) => file.content !== file.savedContent,
@@ -155,7 +358,7 @@ export function useProjectFileActions() {
         return;
       }
       const store = useEditorStore.getState();
-      store.loadProject(project, path);
+      store.loadProject(parsed, path);
       store.bumpFilesVersion();
       toast("项目已打开", "success");
     } catch (error) {
@@ -170,33 +373,41 @@ export function useProjectFileActions() {
 
   const saveProjectAction = useCallback(async (saveAs = false) => {
     const state = useEditorStore.getState();
-    const page = selectActivePage(state);
     setBusy(true);
     try {
-      let targetPath = saveAs ? null : state.projectPath;
-      const folder = state.projectFolder;
-      if (
-        !saveAs &&
-        folder &&
-        (!targetPath ||
-          folderOfPath(targetPath)?.replace(/[\\/]+$/, "") !==
-            folder.replace(/[\\/]+$/, ""))
-      ) {
-        targetPath = projectPathInFolder(folder, state.project.name);
+      if (!isTauri()) {
+        toast("保存项目仅支持桌面应用", "error");
+        return;
       }
-      const path = await writeProjectFile(state.project, targetPath, {
-        saveAs,
-        fileName: page.title,
-      });
-      if (path || !isTauri()) {
-        const store = useEditorStore.getState();
-        store.markSaved(path);
-        store.bumpFilesVersion();
-        toast("项目已保存", "success");
+      let folder = state.projectFolder;
+      if (saveAs) {
+        const selected = await open({
+          directory: true,
+          multiple: false,
+          title: "选择项目文件夹",
+        });
+        if (!selected || Array.isArray(selected)) {
+          return;
+        }
+        folder = selected;
       }
+      if (!folder) {
+        toast("请先打开项目文件夹", "error");
+        return;
+      }
+      const manifestPath = await writeWholeProject(folder, state.project);
+      const store = useEditorStore.getState();
+      store.setPageFiles(
+        Object.fromEntries(
+          Array.from(pageFileMap(store.project).entries()),
+        ),
+      );
+      store.markSaved(manifestPath);
+      store.bumpFilesVersion();
+      toast(`项目已保存，共 ${store.project.pages.length} 个页面`, "success");
     } catch (error) {
       toast(
-        error instanceof Error ? error.message : "无法保存项目文件",
+        error instanceof Error ? error.message : "无法保存项目",
         "error",
       );
     } finally {
@@ -214,18 +425,20 @@ export function useProjectFileActions() {
     }
     setBusy(true);
     try {
-      const content = serializeProject({
-        ...state.project,
-        pages: [page],
-      });
-      const path = pageXmlPath(state.project, page);
-      await invoke("write_text_file", {
-        path: joinPath(folder, path),
-        content,
-      });
+      const files = pageFileMap(state.project);
+      const file = files.get(page.id);
+      if (!file) {
+        throw new Error("无法确定页面文件路径");
+      }
+      const pageWithFile = { ...page, file };
+      await writePageFile(folder, state.project, pageWithFile, file);
+      if (isTauri()) {
+        await writeManifest(folder, state.project);
+      }
       const store = useEditorStore.getState();
+      store.setPageFiles({ [page.id]: file });
       store.bumpFilesVersion();
-      toast(`页面已保存到 ${path}`, "success");
+      toast(`页面已保存到 ${file}`, "success");
     } catch (error) {
       toast(
         error instanceof Error ? error.message : "无法保存页面",

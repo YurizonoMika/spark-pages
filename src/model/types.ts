@@ -84,6 +84,7 @@ export interface Page {
   modules: ModuleNode[];
   customScript?: string;
   scriptLanguage?: "javascript" | "typescript";
+  file?: string;
   animations?: AnimationConfig;
   keyframes?: KeyframeAnimation;
   animationTrigger?: AnimationTrigger;

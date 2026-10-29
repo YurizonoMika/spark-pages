@@ -306,6 +306,7 @@ export interface EditorState {
   setBuildOpen: (open: boolean) => void;
   setPageBuildOpen: (open: boolean) => void;
   setProjectPath: (path: string | null) => void;
+  setPageFiles: (files: Record<string, string>) => void;
   markSaved: (path: string | null) => void;
   newProject: () => void;
   loadProject: (project: Project, path?: string | null) => void;
@@ -1705,6 +1706,19 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   setProjectPath(path) {
     set({ projectPath: path, projectFolder: folderOfPath(path) });
+  },
+
+  setPageFiles(files) {
+    set((state) => ({
+      project: produce(state.project, (draft) => {
+        for (const page of draft.pages) {
+          const file = files[page.id];
+          if (file) {
+            page.file = file;
+          }
+        }
+      }),
+    }));
   },
 
   markSaved(path) {

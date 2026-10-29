@@ -68,8 +68,46 @@ export function buildExistingFiles(
     .map((path) => path.slice(prefix.length));
 }
 
+function normalizePageFile(file: string): string | null {
+  const normalized = file.replaceAll("\\", "/").replace(/^\.\//, "").trim();
+  if (
+    !normalized.startsWith("pages/") ||
+    !normalized.toLowerCase().endsWith(".spark") ||
+    normalized.split("/").some((part) => part === ".." || part === "")
+  ) {
+    return null;
+  }
+  return normalized;
+}
+
+export function pageFileMap(project: Project): Map<string, string> {
+  const used = new Set<string>();
+  const result = new Map<string, string>();
+  for (const page of project.pages) {
+    const preferred = page.file ? normalizePageFile(page.file) : null;
+    let file = preferred && !used.has(preferred) ? preferred : null;
+    if (!file) {
+      const base = `pages/${pageSlug(project, page)}.spark`;
+      const stem = base.replace(/\.spark$/i, "");
+      let suffix = 2;
+      file = base;
+      while (used.has(file)) {
+        file = `${stem}-${suffix}.spark`;
+        suffix += 1;
+      }
+    }
+    used.add(file);
+    result.set(page.id, file);
+  }
+  return result;
+}
+
+export function pageDesignPath(project: Project, page: Page): string {
+  return pageFileMap(project).get(page.id) ?? `pages/${pageSlug(project, page)}.spark`;
+}
+
 export function pageXmlPath(project: Project, page: Page): string {
-  return `${pageCodeDirectory(project, pageSlug(project, page))}/page.spark`;
+  return pageDesignPath(project, page);
 }
 
 export function projectSettingsSummary(project: Project): string {

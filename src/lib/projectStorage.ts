@@ -82,6 +82,7 @@ const pageSchema = z.object({
   modules: z.array(moduleSchema),
   customScript: z.string().optional(),
   scriptLanguage: z.enum(["javascript", "typescript"]).optional(),
+  file: z.string().optional(),
   animations: animationSchema.optional(),
   keyframes: keyframeAnimationSchema.optional(),
   animationTrigger: animationTriggerSchema.optional(),
