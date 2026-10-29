@@ -44,6 +44,17 @@ function folderName(folder: string): string {
   );
 }
 
+function hasProjectEntries(entries: ProjectFileEntry[]): boolean {
+  return entries.some(
+    (entry) =>
+      !entry.isDir &&
+      (entry.path === PROJECT_MANIFEST_FILE ||
+        (!entry.path.includes("/") &&
+          entry.path.toLowerCase().endsWith(".spark")) ||
+        /^pages\/[^/]+\.spark$/i.test(entry.path)),
+  );
+}
+
 function relativeProjectPath(folder: string, path: string): string {
   const normalizedFolder = folder.replaceAll("\\", "/").replace(/\/+$/, "");
   const normalizedPath = path.replaceAll("\\", "/");
@@ -217,57 +228,21 @@ function installProject(
 export function useProjectFileActions() {
   const [busy, setBusy] = useState(false);
 
-  const newProjectAction = useCallback(async () => {
+  const switchProjectFolder = useCallback(async (folder: string) => {
     const state = useEditorStore.getState();
     if (
       state.openFiles.some(
         (file) => file.content !== file.savedContent,
       ) &&
-      !window.confirm("还有未保存的代码文件，确定新建项目吗？")
+      !window.confirm("还有未保存的代码文件，确定切换工作区吗？")
     ) {
       return;
     }
     if (state.dirty && !(await confirmDiscardChanges())) {
       return;
     }
-    const folder = state.projectFolder;
-    state.newProject();
-    if (folder) {
-      const store = useEditorStore.getState();
-      store.setProjectFolder(folder);
-      store.bumpFilesVersion();
-    }
-    toast("已新建项目", "success");
-  }, []);
-
-  const openFolderAction = useCallback(async () => {
-    if (!isTauri()) {
-      toast("打开文件夹仅支持桌面应用", "error");
-      return;
-    }
+    setBusy(true);
     try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: "打开项目文件夹",
-      });
-      if (!selected || Array.isArray(selected)) {
-        return;
-      }
-      const state = useEditorStore.getState();
-      if (
-        state.openFiles.some(
-          (file) => file.content !== file.savedContent,
-        ) &&
-        !window.confirm("还有未保存的代码文件，确定切换工作区吗？")
-      ) {
-        return;
-      }
-      if (state.dirty && !(await confirmDiscardChanges())) {
-        return;
-      }
-      setBusy(true);
-      const folder = selected;
       const entries = await listProjectFiles(folder);
       const manifestEntry = entries.find(
         (entry) => !entry.isDir && entry.path === PROJECT_MANIFEST_FILE,
@@ -311,17 +286,84 @@ export function useProjectFileActions() {
       project.name = folderName(folder);
       const manifestPath = await writeWholeProject(folder, project);
       installProject(projectWithFiles(project), folder, manifestPath);
-      toast("已在文件夹中创建新项目", "success");
-      return;
+      toast("已在所选目录创建并打开新项目", "success");
     } catch (error) {
       toast(
-        error instanceof Error ? error.message : "无法打开文件夹",
+        error instanceof Error ? error.message : "无法打开项目文件夹",
         "error",
       );
     } finally {
       setBusy(false);
     }
   }, []);
+
+  const newProjectAction = useCallback(async () => {
+    if (!isTauri()) {
+      toast("新建项目仅支持桌面应用", "error");
+      return;
+    }
+    let selected: string | string[] | null;
+    try {
+      selected = await open({
+        directory: true,
+        multiple: false,
+        title: "选择新项目的工作目录",
+      });
+    } catch (dialogError) {
+      toast(
+        dialogError instanceof Error
+          ? dialogError.message
+          : "无法选择项目目录",
+        "error",
+      );
+      return;
+    }
+    if (!selected || Array.isArray(selected)) {
+      return;
+    }
+    try {
+      const entries = await listProjectFiles(selected);
+      if (
+        hasProjectEntries(entries) &&
+        !window.confirm(
+          "所选文件夹已经包含 Spark 项目，是否打开已有项目？",
+        )
+      ) {
+        return;
+      }
+      await switchProjectFolder(selected);
+    } catch (error) {
+      toast(
+        error instanceof Error
+          ? error.message
+          : "无法读取所选项目目录",
+        "error",
+      );
+    }
+  }, [switchProjectFolder]);
+
+  const openFolderAction = useCallback(async () => {
+    if (!isTauri()) {
+      toast("打开文件夹仅支持桌面应用", "error");
+      return;
+    }
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "打开项目文件夹",
+      });
+      if (!selected || Array.isArray(selected)) {
+        return;
+      }
+      await switchProjectFolder(selected);
+    } catch (error) {
+      toast(
+        error instanceof Error ? error.message : "无法打开文件夹",
+        "error",
+      );
+    }
+  }, [switchProjectFolder]);
 
   const openProjectFileAction = useCallback(async (path: string) => {
     const state = useEditorStore.getState();
