@@ -16,8 +16,16 @@ const PREVIEW_BRIDGE = String.raw`<script>
   var selected = [];
   var hovered = null;
 
-  function post(type, id) {
-    parent.postMessage({ source: PREVIEW_SOURCE, type: type, id: id || null }, "*");
+  function post(type, id, ids) {
+    parent.postMessage(
+      {
+        source: PREVIEW_SOURCE,
+        type: type,
+        id: id || null,
+        ids: Array.isArray(ids) ? ids : null,
+      },
+      "*",
+    );
   }
   function moduleAt(x, y) {
     var element = document.elementFromPoint(x, y);
@@ -67,8 +75,14 @@ const PREVIEW_BRIDGE = String.raw`<script>
       var target = wandActive ? moduleAt(data.x, data.y) : null;
       var id = target && target.getAttribute("data-spark-module-id");
       if (id) {
-        applySelection([id]);
-        post("select", id);
+        var next = [id];
+        if (data.multi) {
+          next = selected.indexOf(id) === -1
+            ? selected.concat([id])
+            : selected.filter(function (item) { return item !== id; });
+        }
+        applySelection(next);
+        post("select", id, next);
       }
     }
   });

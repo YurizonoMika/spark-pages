@@ -1849,6 +1849,12 @@ svg {
   color: var(--md-on-primary-container);
 }
 
+.preview-wand-hint {
+  color: var(--md-on-surface-variant);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
 .preview-selection {
   display: flex;
   align-items: center;

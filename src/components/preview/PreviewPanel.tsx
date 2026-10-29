@@ -117,7 +117,12 @@ export function PreviewPanel() {
       event.stopPropagation();
       const point = pointOf(event.clientX, event.clientY);
       if (point) {
-        postPreview({ type: "select", x: point.x, y: point.y });
+        postPreview({
+          type: "select",
+          x: point.x,
+          y: point.y,
+          multi: event.metaKey || event.ctrlKey || event.shiftKey,
+        });
       }
     },
     [pointOf, postPreview],
@@ -141,15 +146,25 @@ export function PreviewPanel() {
         return;
       }
       const data = event.data as
-        | { source?: string; type?: string; id?: string | null }
+        | {
+            source?: string;
+            type?: string;
+            id?: string | null;
+            ids?: unknown;
+          }
         | null;
       if (!data || data.source !== "spark-pages-preview") {
         return;
       }
       if (data.type === "ready") {
         syncPreview();
-      } else if (data.type === "select" && typeof data.id === "string") {
-        setSelection([data.id]);
+      } else if (data.type === "select") {
+        const ids = Array.isArray(data.ids)
+          ? data.ids.filter((id): id is string => typeof id === "string")
+          : typeof data.id === "string"
+            ? [data.id]
+            : [];
+        setSelection(ids);
       }
     };
     window.addEventListener("message", handleMessage);
@@ -172,6 +187,11 @@ export function PreviewPanel() {
               <MousePointer2 size={13} />
               已选中 {selectedCount}
             </span>
+          ) : null}
+          {wandActive ? (
+            <small className="preview-wand-hint">
+              点击多选 · ⌘/Ctrl/Shift 切换
+            </small>
           ) : null}
           <button
             type="button"

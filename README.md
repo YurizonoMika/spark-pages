@@ -145,7 +145,7 @@ return element.getAttribute("data-state") === "ready";
   - 没有打开文档时不调用任何工具，并提示先打开页面或文件
 - 内置技能：通用编辑、生成页面、重设计、优化文案、只改选中、交互动画
 - Agent 可通过 `create_animation_group` 新建多组动画，并用 `groupId` 指定组，再通过 `set_animation_trigger` 设置点击、悬停、组件值条件和自定义 JS 触发；动画组会随 XML 一起进入构建提示词
-- 预览魔杖选中元素后，选区自动附加到下一次 Agent 消息
+- 预览魔杖支持多选：普通点击选中一个，按住 ⌘/Ctrl/Shift 点击可追加或取消；选区自动附加到下一次 Agent 消息
 - 工具修改合并为一次撤销；聊天记录按项目保存
 - 兼容 OpenAI 兼容接口，模型需支持 Function Calling / Tools
 
