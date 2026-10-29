@@ -95,20 +95,19 @@ export function AnimationDock() {
   const targetLabel = targetModule
     ? getModuleDefinitionSafe(targetModule.type).label
     : "页面";
-  const keyframes =
-    targetModule?.keyframes ??
-    page.keyframes ??
-    DEFAULT_KEYFRAME_ANIMATION;
+  const keyframes = targetModule
+    ? targetModule.keyframes ?? DEFAULT_KEYFRAME_ANIMATION
+    : page.keyframes ?? DEFAULT_KEYFRAME_ANIMATION;
   const duration = keyframes.duration;
   const loop = keyframes.loop;
-  const presetConfig =
-    targetModule?.animations ?? page.animations ?? DEFAULT_ANIMATION;
+  const presetConfig = targetModule
+    ? targetModule.animations ?? DEFAULT_ANIMATION
+    : page.animations ?? DEFAULT_ANIMATION;
   const targetKey = targetModule ? `module-${targetModule.id}` : `page-${page.id}`;
   const targetTrigger =
     targetModule?.animationTrigger ?? page.animationTrigger;
   const targetHasAnimation = Boolean(
-    hasAnimations(targetModule?.animations ?? page.animations) ||
-      hasKeyframes(targetModule?.keyframes ?? page.keyframes),
+    hasAnimations(presetConfig) || hasKeyframes(keyframes),
   );
 
   const [selectedKeyframe, setSelectedKeyframe] = useState<{
