@@ -8,6 +8,8 @@ import {
   Copy,
   Eye,
   FileText,
+  ImagePlus,
+  Loader2,
   Move,
   MousePointer2,
   Palette,
@@ -19,6 +21,8 @@ import {
 } from "lucide-react";
 import {
   useEffect,
+  useId,
+  useRef,
   useState,
   type ChangeEvent,
   type ReactNode,
@@ -47,6 +51,10 @@ import {
 import { FONT_OPTIONS } from "../../model/fonts";
 import { clamp, snap } from "../../lib/geometry";
 import { IconButton } from "../ui/IconButton";
+import {
+  dataUrlBytes,
+  imageFileToDataUrl,
+} from "../../lib/imageUpload";
 
 const FIELD_GROUP_META: Record<
   ModuleFieldGroup,
@@ -142,6 +150,161 @@ function useLocalValue(value: string): [string, (next: string) => void] {
   return [local, setLocal];
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+function ImageSourceControl({
+  module,
+  field,
+}: {
+  module: ModuleNode;
+  field: ModuleField;
+}) {
+  const value =
+    typeof module.props[field.key] === "string"
+      ? (module.props[field.key] as string)
+      : "";
+  const [local, setLocal] = useLocalValue(value);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const inputId = useId();
+  const beginTransaction = useEditorStore((state) => state.beginTransaction);
+  const endTransaction = useEditorStore((state) => state.endTransaction);
+  const updateTransient = useEditorStore(
+    (state) => state.updateModulePropsTransient,
+  );
+  const updateProps = useEditorStore((state) => state.updateModuleProps);
+  const localImage = value.startsWith("data:image/");
+
+  const handleFile = async (file: File) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await imageFileToDataUrl(file);
+      const patch: Record<string, string> = { [field.key]: result.dataUrl };
+      const alt = String(module.props.alt ?? "").trim();
+      if (!alt) {
+        patch.alt = result.name.replace(/\.[^.]+$/, "");
+      }
+      updateProps(module.id, patch);
+      setLocal(result.dataUrl);
+    } catch (fileError) {
+      setError(
+        fileError instanceof Error ? fileError.message : "无法读取图片",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Control label={field.label} wide>
+      <div className="image-source-control">
+        {localImage ? (
+          <div className="image-source-local">
+            <span className="image-source-badge">
+              <ImagePlus size={12} />
+              本地图片 · {formatFileSize(dataUrlBytes(value))}
+            </span>
+            <div className="image-source-actions">
+              <button
+                type="button"
+                className="btn btn-ghost btn-compact"
+                disabled={busy}
+                onClick={() => fileRef.current?.click()}
+              >
+                {busy ? (
+                  <Loader2 size={12} className="spin" />
+                ) : (
+                  <ImagePlus size={12} />
+                )}
+                替换
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-compact"
+                disabled={busy}
+                onClick={() => {
+                  updateProps(module.id, { [field.key]: "" });
+                  setLocal("");
+                }}
+              >
+                <Trash2 size={12} />
+                移除
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="image-source-row">
+            <input
+              type="text"
+              value={local}
+              placeholder={field.placeholder}
+              onFocus={beginTransaction}
+              onChange={(event) => {
+                setLocal(event.target.value);
+                updateTransient(module.id, {
+                  [field.key]: event.target.value,
+                });
+              }}
+              onBlur={endTransaction}
+            />
+            <button
+              type="button"
+              className="btn btn-ghost btn-compact"
+              disabled={busy}
+              onClick={() => fileRef.current?.click()}
+            >
+              {busy ? (
+                <Loader2 size={12} className="spin" />
+              ) : (
+                <ImagePlus size={12} />
+              )}
+              从文件插入
+            </button>
+          </div>
+        )}
+
+        <input
+          id={inputId}
+          ref={fileRef}
+          className="image-file-input"
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/avif"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) {
+              void handleFile(file);
+            }
+          }}
+        />
+
+        {value ? (
+          <div className="image-source-preview">
+            <img src={value} alt="" draggable={false} />
+          </div>
+        ) : null}
+
+        {error ? (
+          <p className="panel-hint is-error">{error}</p>
+        ) : (
+          <p className="panel-hint">
+            {localImage
+              ? "图片已存入设计稿；构建时会写入 build/ 对应页面的 assets 目录。"
+              : "支持 PNG / JPG / WebP / GIF / SVG；从文件插入的大图会自动压缩。"}
+          </p>
+        )}
+      </div>
+    </Control>
+  );
+}
+
 function TextControl({
   module,
   field,
@@ -159,6 +322,10 @@ function TextControl({
   const updateTransient = useEditorStore(
     (state) => state.updateModulePropsTransient,
   );
+
+  if (module.type === "core.image" && field.key === "src") {
+    return <ImageSourceControl module={module} field={field} />;
+  }
 
   if (field.kind === "textarea") {
     return (

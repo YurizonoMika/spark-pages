@@ -3636,6 +3636,7 @@ dependencies = [
 name = "spark-pages"
 version = "0.1.0"
 dependencies = [
+ "base64 0.21.7",
  "reqwest",
  "serde",
  "serde_json",

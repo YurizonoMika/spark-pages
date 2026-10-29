@@ -1,3 +1,4 @@
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -334,6 +335,57 @@ fn list_project_files(root: String) -> Result<Vec<ProjectFileEntry>, String> {
     Ok(entries)
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BuildAssetInput {
+    path: String,
+    data_url: String,
+}
+
+#[tauri::command]
+fn write_build_assets(root: String, assets: Vec<BuildAssetInput>) -> Result<usize, String> {
+    if assets.is_empty() {
+        return Ok(0);
+    }
+    if assets.len() > MAX_AI_FILES {
+        return Err(format!("图片数量过多（最多 {MAX_AI_FILES} 个）"));
+    }
+    let root_path = PathBuf::from(&root);
+    if !root_path.exists() {
+        fs::create_dir_all(&root_path).map_err(|error| format!("无法创建构建文件夹: {error}"))?;
+    } else if !root_path.is_dir() {
+        return Err("输出路径不是文件夹".to_string());
+    }
+
+    let mut total_bytes = 0usize;
+    for asset in &assets {
+        let payload = asset
+            .data_url
+            .split_once(',')
+            .map(|(_, value)| value)
+            .ok_or_else(|| format!("图片数据不完整: {}", asset.path))?;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(payload)
+            .map_err(|error| format!("无法解析图片数据 {}: {error}", asset.path))?;
+        if bytes.len() > MAX_AI_FILE_BYTES {
+            return Err(format!("图片过大: {}", asset.path));
+        }
+        total_bytes += bytes.len();
+        if total_bytes > MAX_PROJECT_BYTES as usize {
+            return Err("图片总大小超出限制".to_string());
+        }
+        let relative = safe_relative_path(&asset.path)?;
+        let target = root_path.join(relative);
+        if let Some(parent_dir) = target.parent() {
+            fs::create_dir_all(parent_dir)
+                .map_err(|error| format!("无法创建图片目录 {}: {error}", asset.path))?;
+        }
+        fs::write(&target, &bytes)
+            .map_err(|error| format!("无法写入图片 {}: {error}", asset.path))?;
+    }
+    Ok(assets.len())
+}
+
 #[tauri::command]
 fn write_build_files(root: String, files: Vec<ProjectFileInput>) -> Result<String, String> {
     if files.is_empty() {
@@ -485,7 +537,8 @@ pub fn run() {
             project_folder_available,
             write_project_files,
             list_project_files,
-            write_build_files
+            write_build_files,
+            write_build_assets
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -552,6 +605,39 @@ mod tests {
         assert!(second.is_err());
 
         fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
+    fn writes_build_assets_from_data_urls() {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("spark-pages-assets-{stamp}"));
+
+        let count = write_build_assets(
+            root.to_string_lossy().to_string(),
+            vec![BuildAssetInput {
+                path: "pages/home/assets/images/hero.png".to_string(),
+                data_url: "data:image/png;base64,aGVsbG8=".to_string(),
+            }],
+        )
+        .unwrap();
+
+        assert_eq!(count, 1);
+        let bytes = fs::read(root.join("pages/home/assets/images/hero.png")).unwrap();
+        assert_eq!(bytes, b"hello");
+
+        let escaped = write_build_assets(
+            root.to_string_lossy().to_string(),
+            vec![BuildAssetInput {
+                path: "../outside.png".to_string(),
+                data_url: "data:image/png;base64,aGVsbG8=".to_string(),
+            }],
+        );
+        assert!(escaped.is_err());
+
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

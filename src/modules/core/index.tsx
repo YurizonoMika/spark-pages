@@ -378,9 +378,9 @@ const image: ModuleDefinition = {
   fields: [
     {
       key: "src",
-      label: "图片地址",
+      label: "图片来源",
       kind: "text",
-      placeholder: "https://… 或 assets/…",
+      placeholder: "选择文件，或填写 https://… / assets/…",
     },
     { key: "alt", label: "替代文本", kind: "text", placeholder: "图片描述" },
     {
@@ -409,7 +409,7 @@ const image: ModuleDefinition = {
           style={{ borderRadius: radius }}
         >
           <ImageIcon size={28} strokeWidth={1.5} />
-          <span>在右侧填写图片地址</span>
+          <span>在右侧选择图片或填写地址</span>
         </div>
       );
     }

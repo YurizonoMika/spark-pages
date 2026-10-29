@@ -29,7 +29,11 @@ import {
   writePageFiles,
   type BuiltPage,
 } from "../../lib/ai/pageBuild";
-import { listProjectFiles } from "../../lib/ai/build";
+import { listProjectFiles, writeBuildAssets } from "../../lib/ai/build";
+import {
+  extractBuildAssets,
+  inlinePreviewAssets,
+} from "../../lib/ai/buildAssets";
 import {
   buildExistingFiles,
   pageCodeDirectory,
@@ -178,9 +182,17 @@ function PageBuildModalInner() {
       const buildRoot = projectBuildRoot(folder);
       const existing = await listProjectFiles(folder);
       const existingFiles = buildExistingFiles(existing);
+      const extracted = extractBuildAssets(project);
+      const buildProject = extracted.project;
+      const buildPage =
+        buildProject.pages.find((candidate) => candidate.id === page.id) ??
+        page;
+      const assets = extracted.assets.filter(
+        (asset) => asset.pageId === page.id,
+      );
       const built = await buildPageWithAi(
-        project,
-        page,
+        buildProject,
+        buildPage,
         config,
         instruction,
         {
@@ -195,13 +207,24 @@ function PageBuildModalInner() {
         },
       );
       setStatus("正在写入页面文件…");
-      await writePageFiles(buildRoot, built.files);
+      const files = inlinePreviewAssets(built.files, assets);
+      await writePageFiles(buildRoot, files);
+      await writeBuildAssets(buildRoot, assets);
       bumpFilesVersion();
+      let preview = buildPagePreviewHtml(
+        buildProject,
+        buildPage,
+        files,
+      );
+      for (const asset of assets) {
+        preview = preview?.replaceAll(asset.src, asset.dataUrl) ?? null;
+      }
       setResult({
         ...built,
+        files,
         root: buildRoot,
         directory,
-        preview: buildPagePreviewHtml(project, page, built.files),
+        preview,
       });
       setStatus("页面构建完成");
       toast("页面构建完成", "success");

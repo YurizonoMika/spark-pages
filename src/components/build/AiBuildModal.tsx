@@ -22,9 +22,14 @@ import { hasApiKey } from "../../lib/ai/client";
 import {
   generateProjectFiles,
   listProjectFiles,
+  writeBuildAssets,
   writeBuildFiles,
   type BuildResult,
 } from "../../lib/ai/build";
+import {
+  extractBuildAssets,
+  inlinePreviewAssets,
+} from "../../lib/ai/buildAssets";
 import {
   buildExistingFiles,
   projectBuildRoot,
@@ -156,8 +161,9 @@ function AiBuildModalInner() {
       const buildRoot = projectBuildRoot(folder);
       const existing = await listProjectFiles(folder);
       const existingFiles = buildExistingFiles(existing);
+      const extracted = extractBuildAssets(project);
       const generated = await generateProjectFiles(
-        project,
+        extracted.project,
         config,
         instruction,
         buildRoot,
@@ -170,9 +176,14 @@ function AiBuildModalInner() {
         },
       );
       setStatus("正在写入项目文件…");
-      await writeBuildFiles(buildRoot, generated.files);
+      const files = inlinePreviewAssets(
+        generated.files,
+        extracted.assets,
+      );
+      await writeBuildFiles(buildRoot, files);
+      await writeBuildAssets(buildRoot, extracted.assets);
       bumpFilesVersion();
-      setResult({ ...generated, root: buildRoot });
+      setResult({ ...generated, files, root: buildRoot });
       setStatus("构建完成");
       toast("AI 项目构建完成", "success");
     } catch (buildError) {
