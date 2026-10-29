@@ -202,6 +202,74 @@ describe("agent runtime", () => {
     expect(invalid.error).toContain("entrance");
   });
 
+  it("attaches wand-selected script blocks and updates them", async () => {
+    const page = useEditorStore.getState().project.pages[0];
+    page.scriptBoard = {
+      blocks: [
+        {
+          id: "block_a",
+          kind: "custom",
+          title: "点击逻辑",
+          code: 'console.log("old");',
+          x: 0,
+          y: 0,
+          width: 260,
+          height: 168,
+        },
+      ],
+      connections: [],
+    };
+    const mocked = vi.mocked(chatCompletion);
+    mocked.mockResolvedValueOnce({
+      message: {
+        role: "assistant",
+        content: "正在修改积木。",
+        tool_calls: [
+          {
+            id: "call_board",
+            type: "function",
+            function: {
+              name: "update_script_blocks",
+              arguments: JSON.stringify({
+                blocks: [
+                  { id: "block_a", code: 'console.log("new");' },
+                ],
+              }),
+            },
+          },
+        ],
+      },
+    } as never);
+    mocked.mockResolvedValueOnce({
+      message: { role: "assistant", content: "积木已修改。" },
+    } as never);
+
+    const result = await runAgentTurn({
+      config,
+      skillId: "general",
+      history: [],
+      userText: "改成输出 new",
+      selectedModuleIds: [],
+      selectedScriptBlockIds: ["block_a"],
+    });
+
+    expect(result.traces[0]).toMatchObject({
+      name: "update_script_blocks",
+      status: "success",
+    });
+    const updated = useEditorStore
+      .getState()
+      .project.pages[0].scriptBoard?.blocks.find(
+        (block) => block.id === "block_a",
+      );
+    expect(updated?.code).toBe('console.log("new");');
+    const userMessage = mocked.mock.calls[0][1].find(
+      (message) => message.role === "user",
+    );
+    expect(userMessage?.content).toContain("[魔杖选中的脚本积木]");
+    expect(userMessage?.content).toContain('console.log("old");');
+  });
+
   it("returns tool errors to the model instead of throwing", async () => {
     const mocked = vi.mocked(chatCompletion);
     mocked.mockResolvedValueOnce({

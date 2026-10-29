@@ -67,6 +67,8 @@ export const TOOL_LABELS: Record<string, string> = {
   write_page_file: "写入页面文件",
   read_page_script: "读取页面脚本",
   write_page_script: "写入页面脚本",
+  get_script_board: "读取脚本画板",
+  update_script_blocks: "修改脚本积木",
   read_current_file: "读取当前文件",
   write_current_file: "写入当前文件",
   set_preset_animation: "设置预设动画",
@@ -314,6 +316,41 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
           },
         },
         required: ["code"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_script_board",
+      description:
+        "读取当前页面的脚本画板：积木 ID、类型、标题、代码以及连线。修改积木前使用。",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_script_blocks",
+      description:
+        "批量修改脚本画板积木的代码和标题。每个 code 必须是完整的新内容；只能修改传入的积木，不能修改未选中的积木。",
+      parameters: {
+        type: "object",
+        properties: {
+          blocks: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string", description: "积木 ID" },
+                title: { type: "string", description: "积木标题，可省略" },
+                code: { type: "string", description: "完整的新内容" },
+              },
+              required: ["id", "code"],
+            },
+          },
+        },
+        required: ["blocks"],
       },
     },
   },
@@ -1020,6 +1057,64 @@ export function executeAgentTool(
         ok: true,
         summary: `为${label}新建动画组 ${groupId}`,
         result: { target, groupId },
+      };
+    }
+
+    if (name === "get_script_board") {
+      const board = page.scriptBoard ?? { blocks: [], connections: [] };
+      return {
+        ok: true,
+        summary: `读取脚本画板，共 ${board.blocks.length} 个积木`,
+        result: {
+          blocks: board.blocks.map((block) => ({
+            id: block.id,
+            kind: block.kind,
+            title: block.title,
+            code: block.code,
+            x: block.x,
+            y: block.y,
+          })),
+          connections: board.connections,
+        },
+      };
+    }
+
+    if (name === "update_script_blocks") {
+      const raw = args.blocks;
+      if (!Array.isArray(raw) || raw.length === 0) {
+        throw new Error("blocks 必须是非空数组");
+      }
+      const board = page.scriptBoard ?? { blocks: [], connections: [] };
+      const boardIds = new Set(board.blocks.map((block) => block.id));
+      const selection = new Set(state.scriptSelection);
+      const updates = raw.map((item) => {
+        const record = objectArg(item);
+        const id = stringArg(record, "id");
+        if (!boardIds.has(id)) {
+          throw new Error(`脚本积木不存在: ${id}`);
+        }
+        if (selection.size > 0 && !selection.has(id)) {
+          throw new Error(`只能修改魔杖选中的积木: ${id}`);
+        }
+        const code =
+          typeof record.code === "string"
+            ? record.code
+            : (() => {
+                throw new Error(`缺少积木内容: ${id}`);
+              })();
+        return {
+          id,
+          code,
+          ...(typeof record.title === "string"
+            ? { title: record.title }
+            : {}),
+        };
+      });
+      state.updateScriptBlocks(updates);
+      return {
+        ok: true,
+        summary: `修改 ${updates.length} 个脚本积木`,
+        result: { ids: updates.map((update) => update.id) },
       };
     }
 

@@ -90,6 +90,10 @@ export function AIChatPanel() {
   const page = useEditorStore(selectActivePage);
   const project = useEditorStore((state) => state.project);
   const selection = useEditorStore((state) => state.selection);
+  const scriptSelection = useEditorStore(
+    (state) => state.scriptSelection,
+  );
+  const activeFilePath = useEditorStore((state) => state.activeFilePath);
   const setSettingsOpen = useEditorStore((state) => state.setSettingsOpen);
   const messages = useAiChatStore((state) => state.messages);
   const busy = useAiChatStore((state) => state.busy);
@@ -125,6 +129,11 @@ export function AIChatPanel() {
   const selectedModules = page.modules.filter((module) =>
     selection.includes(module.id),
   );
+  const selectedScriptBlocks = activeFilePath
+    ? []
+    : (page.scriptBoard?.blocks ?? []).filter((block) =>
+        scriptSelection.includes(block.id),
+      );
   const skill = agentSkill(skillId);
 
   const send = async () => {
@@ -148,9 +157,15 @@ export function AIChatPanel() {
         content: message.content,
       }));
     const selectedIds = [...selection];
-    const attachments = selectedModules.map(
-      (module) => getModuleDefinitionSafe(module.type).label,
+    const selectedBlockIds = selectedScriptBlocks.map(
+      (block) => block.id,
     );
+    const attachments = [
+      ...selectedModules.map(
+        (module) => getModuleDefinitionSafe(module.type).label,
+      ),
+      ...selectedScriptBlocks.map((block) => `积木 · ${block.title}`),
+    ];
     const userMessage: UiChatMessage = {
       id: nanoid(10),
       role: "user",
@@ -182,6 +197,7 @@ export function AIChatPanel() {
         history,
         userText,
         selectedModuleIds: selectedIds,
+        selectedScriptBlockIds: selectedBlockIds,
         onStatus: setStatus,
         onTrace: (trace) => addTrace(assistantId, trace),
         isCancelled: () => cancelRef.current,
@@ -321,7 +337,8 @@ export function AIChatPanel() {
       </div>
 
       <div className="ai-composer">
-        {selectedModules.length > 0 ? (
+        {selectedModules.length > 0 ||
+        selectedScriptBlocks.length > 0 ? (
           <div className="attachment-list">
             <span className="attachment-label">魔杖选区</span>
             {selectedModules.map((module) => {
@@ -333,6 +350,16 @@ export function AIChatPanel() {
                 </span>
               );
             })}
+            {selectedScriptBlocks.map((block) => (
+              <span
+                key={block.id}
+                className="attachment-chip"
+                title={block.code}
+              >
+                <Braces size={12} />
+                {block.title}
+              </span>
+            ))}
           </div>
         ) : null}
 

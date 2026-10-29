@@ -148,6 +148,7 @@ export interface EditorState {
   designView: DesignView;
   fileView: FileView;
   scriptView: ScriptView;
+  scriptSelection: string[];
   leftTab: LeftTab;
   inspectorOpen: boolean;
   projectFolder: string | null;
@@ -302,6 +303,9 @@ export interface EditorState {
   setDesignView: (view: DesignView) => void;
   setFileView: (view: FileView) => void;
   setScriptView: (view: ScriptView) => void;
+  setScriptSelection: (ids: string[]) => void;
+  toggleScriptSelection: (id: string) => void;
+  clearScriptSelection: () => void;
   addScriptBlock: (
     kind: ScriptBlockKind,
     x?: number,
@@ -587,6 +591,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   designView: "canvas",
   fileView: "code",
   scriptView: "code",
+  scriptSelection: [],
   leftTab: "ai",
   inspectorOpen: true,
   projectFolder: restored?.projectFolder ?? null,
@@ -1627,6 +1632,22 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     set({ scriptView: view });
   },
 
+  setScriptSelection(ids) {
+    set({ scriptSelection: ids });
+  },
+
+  toggleScriptSelection(id) {
+    set((state) => ({
+      scriptSelection: state.scriptSelection.includes(id)
+        ? state.scriptSelection.filter((candidate) => candidate !== id)
+        : [...state.scriptSelection, id],
+    }));
+  },
+
+  clearScriptSelection() {
+    set({ scriptSelection: [] });
+  },
+
   addScriptBlock(kind, x, y) {
     const state = get();
     const page = activePageOf(state.project, state.activePageId);
@@ -1704,6 +1725,11 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         (connection) => connection.from !== id && connection.to !== id,
       );
     });
+    set((state) => ({
+      scriptSelection: state.scriptSelection.filter(
+        (blockId) => blockId !== id,
+      ),
+    }));
   },
 
   connectScriptBlocks(from, to) {
@@ -1911,6 +1937,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       designView: "canvas",
       fileView: "code",
       scriptView: "code",
+      scriptSelection: [],
       settingsOpen: false,
       buildOpen: false,
       pageBuildOpen: false,
@@ -1939,6 +1966,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       designView: "canvas",
       fileView: "code",
       scriptView: "code",
+      scriptSelection: [],
       pageBuildOpen: false,
     });
   },
