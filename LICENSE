@@ -1,0 +1,102 @@
+Spark Pages License 1.0
+
+Copyright (c) 2026 YurizonoMika
+Project: https://github.com/YurizonoMika/spark-pages
+
+This is a source-available license, not an OSI-approved open source license.
+It allows non-commercial use, modification and sharing with attribution and
+share-alike obligations. Commercial use requires a separate license from the
+copyright holder. Paid services are allowed under Section 3.
+
+1. DEFINITIONS
+
+"Software" means the Spark Pages source code, documentation, assets and any
+other material distributed under this License.
+
+"Derivative Work" means any work based on or incorporating the Software, in
+whole or in part, including modifications, extensions and combined works.
+
+"Non-Commercial Purpose" means a purpose that is not primarily intended for or
+directed toward commercial advantage or monetary compensation. Personal,
+educational, research and non-profit use are Non-Commercial Purposes.
+
+"Commercial Use" means any use of the Software or a Derivative Work by or for a
+business, or any use primarily intended for commercial advantage or monetary
+compensation, except for Paid Services permitted by Section 3.
+
+"Paid Services" means services you perform for a client using the Software,
+such as design, implementation, customization, integration, deployment,
+consulting, training, support or maintenance, for which you charge a fee.
+
+"Distribute" means to provide the Software or a Derivative Work to any third
+party by any means, including publishing, sublicensing, selling, sharing or
+making it available over a network.
+
+2. GRANT
+
+Subject to this License, the copyright holder grants you a worldwide,
+royalty-free, non-exclusive right to:
+
+  (a) use, reproduce and modify the Software for Non-Commercial Purposes;
+  (b) Distribute the Software and Derivative Works for Non-Commercial Purposes;
+  (c) provide Paid Services as permitted by Section 3.
+
+3. PAID SERVICES EXCEPTION
+
+You may charge for Paid Services provided that:
+
+  (a) you do not sell, sublicense or Distribute the Software itself, or a
+      Derivative Work, as a standalone product or template product;
+  (b) you do not operate a multi-tenant hosted or managed service whose primary
+      value is the functionality of the Software;
+  (c) any Derivative Work you Distribute, or deploy for a client as source
+      code, remains available under this License and its complete corresponding
+      source is provided to the recipient at no additional charge;
+  (d) you comply with the attribution requirements in Section 4.
+
+4. ATTRIBUTION
+
+Any use, publication or distribution of the Software or a Derivative Work must:
+
+  (a) retain this License and all copyright notices;
+  (b) clearly identify Spark Pages as the original project and include a link
+      to https://github.com/YurizonoMika/spark-pages;
+  (c) clearly mark any modifications you made;
+  (d) not remove or obscure author attribution in the user interface where it
+      is reasonably practicable to retain it.
+
+5. NO CLOSED SOURCE
+
+You may not Distribute the Software or a Derivative Work under terms that
+restrict the rights granted by this License. If you Distribute a Derivative
+Work, you must make the complete corresponding source code available under
+this License. You may not combine the Software with terms that prohibit
+recipients from exercising the rights granted here.
+
+6. COMMERCIAL LICENSING
+
+Any Commercial Use not covered by Section 3 requires a separate written
+commercial license from the copyright holder. The copyright holder may also
+use and license the Software under different terms.
+
+7. TERMINATION
+
+This License terminates automatically if you breach any of its terms. Upon
+termination you must stop using and Distributing the Software and destroy or
+delete all copies in your possession, except for copies that must be retained
+by law.
+
+8. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+9. ACCEPTANCE
+
+By using, copying, modifying or distributing the Software, you accept the
+terms of this License.
