@@ -1,5 +1,6 @@
 import type {
   AnimationConfig,
+  AnimationTrigger,
   KeyframeAnimation,
   ModuleNode,
   Page,
@@ -12,6 +13,8 @@ import {
   ENTRANCE_ANIMATIONS,
   EXIT_ANIMATIONS,
   LOOP_ANIMATIONS,
+  hasAnimationTrigger,
+  normalizeTrigger,
   type AnimationOption,
 } from "../../model/animations";
 import {
@@ -66,6 +69,7 @@ export const TOOL_LABELS: Record<string, string> = {
   read_current_file: "读取当前文件",
   write_current_file: "写入当前文件",
   set_preset_animation: "设置预设动画",
+  set_animation_trigger: "设置动画触发",
   set_animation_timing: "设置动画时长",
   add_animation_track: "添加动画轨道",
   remove_animation_track: "删除动画轨道",
@@ -353,6 +357,46 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
   {
     type: "function",
     function: {
+      name: "set_animation_trigger",
+      description:
+        "设置页面或组件的动画触发条件。type=click 点击、hover 悬停、condition 组件值条件、custom 自定义 JS、auto 自动播放。condition 需要 sourceModuleId、sourceProperty（value/text/attribute）、operator（gt/eq/lt）和 value；custom 需要 code，代码需返回布尔值。",
+      parameters: {
+        type: "object",
+        properties: {
+          target: { type: "string", enum: ["page", "module"] },
+          moduleId: { type: "string", description: "target=module 时的目标组件 ID" },
+          type: {
+            type: "string",
+            enum: ["auto", "click", "hover", "condition", "custom"],
+          },
+          sourceModuleId: {
+            type: "string",
+            description: "condition 时要监视值的组件 ID",
+          },
+          sourceProperty: {
+            type: "string",
+            enum: ["value", "text", "attribute"],
+            description: "condition 时读取的值来源，默认 value",
+          },
+          sourceAttribute: {
+            type: "string",
+            description: "sourceProperty=attribute 时的 HTML 属性名，如 data-spark-value",
+          },
+          operator: { type: "string", enum: ["gt", "eq", "lt"] },
+          value: { type: "string", description: "condition 的比较值" },
+          code: {
+            type: "string",
+            description:
+              "custom 条件 JS 代码，可访问 element、modules、event，必须返回布尔值",
+          },
+        },
+        required: ["target", "type"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "set_animation_timing",
       description:
         "设置页面或组件关键帧动画的总时长（毫秒）和是否循环。",
@@ -514,6 +558,9 @@ function moduleSummary(module: ModuleNode) {
     props: module.props,
     ...(module.animations ? { animations: module.animations } : {}),
     ...(module.keyframes ? { keyframes: module.keyframes } : {}),
+    ...(module.animationTrigger
+      ? { animationTrigger: module.animationTrigger }
+      : {}),
   };
 }
 
@@ -637,6 +684,9 @@ export function executeAgentTool(
             ...(page.scriptLanguage ? { scriptLanguage: page.scriptLanguage } : {}),
             ...(page.animations ? { animations: page.animations } : {}),
             ...(page.keyframes ? { keyframes: page.keyframes } : {}),
+            ...(page.animationTrigger
+              ? { animationTrigger: page.animationTrigger }
+              : {}),
             modules: page.modules.map(moduleSummary),
           },
           xml: serializeProject(project),
@@ -855,6 +905,66 @@ export function executeAgentTool(
           language,
           lineCount: rawCode === "" ? 0 : rawCode.split("\n").length,
         },
+      };
+    }
+
+    if (name === "set_animation_trigger") {
+      const { target, label } = animationTarget(args, page);
+      const rawType = typeof args.type === "string" ? args.type : "auto";
+      const sourceModuleId =
+        typeof args.sourceModuleId === "string"
+          ? args.sourceModuleId
+          : undefined;
+      if (
+        !["auto", "click", "hover", "condition", "custom"].includes(rawType)
+      ) {
+        throw new Error(`不支持的触发类型: ${rawType}`);
+      }
+      if (rawType === "condition" && !sourceModuleId) {
+        throw new Error("condition 触发需要提供 sourceModuleId");
+      }
+      if (
+        rawType === "condition" &&
+        sourceModuleId &&
+        !page.modules.some((module) => module.id === sourceModuleId)
+      ) {
+        throw new Error(`条件组件不存在: ${sourceModuleId}`);
+      }
+      if (rawType === "custom" && !String(args.code ?? "").trim()) {
+        throw new Error("custom 触发条件需要提供 code");
+      }
+      const trigger = normalizeTrigger({
+        type: rawType as AnimationTrigger["type"],
+        moduleId: sourceModuleId,
+        property:
+          typeof args.sourceProperty === "string"
+            ? (args.sourceProperty as "value" | "text" | "attribute")
+            : "value",
+        attribute:
+          typeof args.sourceAttribute === "string"
+            ? args.sourceAttribute
+            : undefined,
+        operator:
+          typeof args.operator === "string"
+            ? (args.operator as "gt" | "eq" | "lt")
+            : "gt",
+        value:
+          args.value === undefined || args.value === null
+            ? ""
+            : String(args.value),
+        code: typeof args.code === "string" ? args.code : undefined,
+      });
+      if (target.kind === "page") {
+        state.setPageAnimationTrigger(trigger);
+      } else {
+        state.setModuleAnimationTrigger(target.moduleId, trigger);
+      }
+      return {
+        ok: true,
+        summary: hasAnimationTrigger(trigger)
+          ? `设置${label}的动画触发：${trigger.type}`
+          : `关闭${label}的动画触发条件`,
+        result: { target, trigger },
       };
     }
 

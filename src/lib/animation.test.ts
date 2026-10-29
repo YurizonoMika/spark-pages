@@ -33,6 +33,14 @@ describe("animation helpers", () => {
     expect(html).toContain("spark-exit-fade-out");
   });
 
+  it("pauses layers when a trigger is active", () => {
+    const html = wrapAnimatedHtml("<div>content</div>", config, {
+      paused: true,
+    });
+    expect(html).toContain("animation-play-state:paused");
+    expect(html).toContain("data-spark-anim-style");
+  });
+
   it("does not wrap content without animations", () => {
     expect(wrapAnimatedHtml("<div>content</div>", undefined)).toBe(
       "<div>content</div>",

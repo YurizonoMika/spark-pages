@@ -91,10 +91,16 @@ export interface BuiltKeyframeAnimation {
   wrap: (html: string) => string;
 }
 
+export interface BuildKeyframeOptions {
+  paused?: boolean;
+}
+
 export function buildKeyframeAnimation(
   config: KeyframeAnimation | undefined,
   targetId: string,
+  options: BuildKeyframeOptions = {},
 ): BuiltKeyframeAnimation {
+  const paused = Boolean(options.paused);
   const cssRules: string[] = [];
   const wrappers = new Map<KeyframeProperty, string>();
   const cleanId = safeTargetId(targetId);
@@ -136,7 +142,10 @@ export function buildKeyframeAnimation(
     for (const property of order) {
       const style = wrappers.get(property);
       if (style) {
-        result = `<div class="spark-kf-layer" style="${htmlAttr(style)}">${result}</div>`;
+        const attributes = paused
+          ? ` data-spark-anim-style="${htmlAttr(style)}" style="${htmlAttr(`${style}animation-play-state:paused;`)}"`
+          : ` style="${htmlAttr(style)}"`;
+        result = `<div class="spark-kf-layer"${attributes}>${result}</div>`;
       }
     }
     return result;

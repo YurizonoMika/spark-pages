@@ -22,6 +22,7 @@ import type { Keyframe, KeyframeProperty } from "../../model/types";
 import {
   DEFAULT_ANIMATION,
   EASING_OPTIONS,
+  hasAnimations,
 } from "../../model/animations";
 import {
   ANIMATABLE_PROPERTIES,
@@ -38,6 +39,7 @@ import {
 import { getModuleDefinitionSafe } from "../../modules/registry";
 import { clamp } from "../../lib/geometry";
 import { AnimationSection } from "../inspector/Inspector";
+import { AnimationTriggerSection } from "./AnimationTriggerSection";
 import { IconButton } from "../ui/IconButton";
 
 function formatTime(ms: number): string {
@@ -75,6 +77,12 @@ export function AnimationDock() {
   const setPageAnimations = useEditorStore(
     (state) => state.setPageAnimations,
   );
+  const setModuleAnimationTrigger = useEditorStore(
+    (state) => state.setModuleAnimationTrigger,
+  );
+  const setPageAnimationTrigger = useEditorStore(
+    (state) => state.setPageAnimationTrigger,
+  );
   const setDesignView = useEditorStore((state) => state.setDesignView);
   const setActiveFilePath = useEditorStore(
     (state) => state.setActiveFilePath,
@@ -96,6 +104,12 @@ export function AnimationDock() {
   const presetConfig =
     targetModule?.animations ?? page.animations ?? DEFAULT_ANIMATION;
   const targetKey = targetModule ? `module-${targetModule.id}` : `page-${page.id}`;
+  const targetTrigger =
+    targetModule?.animationTrigger ?? page.animationTrigger;
+  const targetHasAnimation = Boolean(
+    hasAnimations(targetModule?.animations ?? page.animations) ||
+      hasKeyframes(targetModule?.keyframes ?? page.keyframes),
+  );
 
   const [selectedKeyframe, setSelectedKeyframe] = useState<{
     property: KeyframeProperty;
@@ -270,11 +284,18 @@ export function AnimationDock() {
           >
             预设
           </button>
+          <button
+            type="button"
+            className={clsx("animation-tab", tab === "trigger" && "is-active")}
+            onClick={() => setTab("trigger")}
+          >
+            触发
+          </button>
         </div>
 
         <div
           className="animation-transport"
-          style={{ display: tab === "presets" ? "none" : undefined }}
+          style={{ display: tab === "keyframes" ? undefined : "none" }}
         >
           <IconButton
             label="回到开始"
@@ -349,7 +370,22 @@ export function AnimationDock() {
         </IconButton>
       </header>
 
-      {tab === "presets" ? (
+      {tab === "trigger" ? (
+        <div className="animation-presets">
+          <AnimationTriggerSection
+            trigger={targetTrigger}
+            modules={page.modules}
+            scope={targetModule ? "module" : "page"}
+            targetKey={targetKey}
+            hasAnimation={targetHasAnimation}
+            onChange={(trigger) =>
+              targetModule
+                ? setModuleAnimationTrigger(targetModule.id, trigger)
+                : setPageAnimationTrigger(trigger)
+            }
+          />
+        </div>
+      ) : tab === "presets" ? (
         <div className="animation-presets">
           <AnimationSection
             config={presetConfig}

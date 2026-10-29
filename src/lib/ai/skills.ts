@@ -29,6 +29,13 @@ export const AGENT_SKILLS: AgentSkill[] = [
       "当前任务是重设计。先读取页面，再通过 set_theme、update_module、set_page_config 调整颜色、字体、间距、尺寸和布局。保留全部原始文案，除非用户要求改写。",
   },
   {
+    id: "interaction",
+    label: "交互动画",
+    description: "为动画设置点击、悬停、值条件或自定义 JS 触发",
+    prompt:
+      "当前任务是设置动画触发条件。先读取页面或模块确认已有动画；没有动画时先用 set_preset_animation 添加。使用 set_animation_trigger 设置 auto/click/hover/condition/custom。condition 需要指定 sourceModuleId、sourceProperty、operator 和比较值；custom 的 code 必须返回布尔值，可访问 element、modules、event。",
+  },
+  {
     id: "copy",
     label: "优化文案",
     description: "只修改文本内容，不改布局结构",

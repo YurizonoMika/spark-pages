@@ -12,6 +12,26 @@ export interface AnimationConfig {
   easing: string;
 }
 
+export type AnimationTriggerType =
+  | "auto"
+  | "click"
+  | "hover"
+  | "condition"
+  | "custom";
+
+export type AnimationValueSource = "value" | "text" | "attribute";
+export type AnimationCompareOperator = "gt" | "eq" | "lt";
+
+export interface AnimationTrigger {
+  type: AnimationTriggerType;
+  moduleId?: string;
+  property?: AnimationValueSource;
+  attribute?: string;
+  operator?: AnimationCompareOperator;
+  value?: string;
+  code?: string;
+}
+
 export type KeyframeProperty = string;
 export type AnchorX = "left" | "right";
 export type AnchorY = "top" | "bottom";
@@ -41,6 +61,7 @@ export interface ModuleNode {
   anchorY?: AnchorY;
   animations?: AnimationConfig;
   keyframes?: KeyframeAnimation;
+  animationTrigger?: AnimationTrigger;
 }
 
 export interface Page {
@@ -55,6 +76,7 @@ export interface Page {
   scriptLanguage?: "javascript" | "typescript";
   animations?: AnimationConfig;
   keyframes?: KeyframeAnimation;
+  animationTrigger?: AnimationTrigger;
 }
 
 export interface Theme {
@@ -97,4 +119,4 @@ export type CodeLanguage =
   | "css"
   | "json";
 export type SettingsTab = "project" | "ai";
-export type AnimationTab = "keyframes" | "presets";
+export type AnimationTab = "keyframes" | "presets" | "trigger";

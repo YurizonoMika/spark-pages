@@ -26,6 +26,31 @@ describe("renderPageHtml", () => {
     expect(html).toContain(`data-spark-module-id="${id}"`);
   });
 
+  it("renders paused animations and the trigger runtime", () => {
+    const project = defaultProject();
+    const page = project.pages[0];
+    const module = page.modules[0];
+    module.animations = {
+      entrance: "fade-in",
+      loop: "",
+      exit: "",
+      duration: 500,
+      delay: 0,
+      exitDelay: 1000,
+      easing: "ease-out",
+    };
+    module.animationTrigger = {
+      type: "click",
+    };
+
+    const html = renderPageHtml(page, project);
+
+    expect(html).toContain("data-spark-anim-trigger");
+    expect(html).toContain("&quot;type&quot;:&quot;click&quot;");
+    expect(html).toContain("animation-play-state:paused");
+    expect(html).toContain("Spark 动画触发条件执行失败");
+  });
+
   it("adds the wand bridge only in preview mode", () => {
     const project = defaultProject();
     const page = project.pages[0];

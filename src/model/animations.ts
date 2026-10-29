@@ -1,4 +1,10 @@
-import type { AnimationConfig } from "./types";
+import type {
+  AnimationCompareOperator,
+  AnimationConfig,
+  AnimationTrigger,
+  AnimationTriggerType,
+  AnimationValueSource,
+} from "./types";
 
 export interface AnimationOption {
   label: string;
@@ -57,6 +63,64 @@ export const EASING_OPTIONS: AnimationOption[] = [
   { label: "缓入缓出", value: "ease-in-out" },
   { label: "弹性", value: "cubic-bezier(0.34, 1.56, 0.64, 1)" },
 ];
+
+export const DEFAULT_TRIGGER: AnimationTrigger = { type: "auto" };
+
+const TRIGGER_TYPES: AnimationTriggerType[] = [
+  "auto",
+  "click",
+  "hover",
+  "condition",
+  "custom",
+];
+const VALUE_SOURCES: AnimationValueSource[] = ["value", "text", "attribute"];
+const OPERATORS: AnimationCompareOperator[] = ["gt", "eq", "lt"];
+
+export function normalizeTrigger(
+  trigger?: Partial<AnimationTrigger> | null,
+): AnimationTrigger {
+  const type =
+    trigger && TRIGGER_TYPES.includes(trigger.type as AnimationTriggerType)
+      ? (trigger.type as AnimationTriggerType)
+      : "auto";
+  if (type === "auto") {
+    return { type: "auto" };
+  }
+  const next: AnimationTrigger = { type };
+  if (type === "condition") {
+    if (typeof trigger?.moduleId === "string" && trigger.moduleId) {
+      next.moduleId = trigger.moduleId;
+    }
+    next.property = VALUE_SOURCES.includes(
+      trigger?.property as AnimationValueSource,
+    )
+      ? (trigger?.property as AnimationValueSource)
+      : "value";
+    next.operator = OPERATORS.includes(
+      trigger?.operator as AnimationCompareOperator,
+    )
+      ? (trigger?.operator as AnimationCompareOperator)
+      : "gt";
+    next.value = typeof trigger?.value === "string" ? trigger.value : "";
+    if (next.property === "attribute") {
+      next.attribute =
+        typeof trigger?.attribute === "string" && trigger.attribute.trim()
+          ? trigger.attribute.trim()
+          : "data-spark-value";
+    }
+  }
+  if (type === "custom") {
+    next.code =
+      typeof trigger?.code === "string" ? trigger.code : "return false;";
+  }
+  return next;
+}
+
+export function hasAnimationTrigger(
+  trigger?: AnimationTrigger | null,
+): boolean {
+  return Boolean(trigger && trigger.type !== "auto");
+}
 
 export function normalizeAnimation(
   patch: Partial<AnimationConfig> = {},

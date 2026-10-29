@@ -3,6 +3,8 @@ import { getModuleDefinitionSafe } from "../modules/registry";
 import { escapeHtml, htmlAttr } from "./escape";
 import { rectOf } from "./geometry";
 import { ANIMATION_CSS, wrapAnimatedHtml } from "./animation";
+import { hasAnimations } from "../model/animations";
+import { hasKeyframes } from "../model/keyframes";
 import { buildKeyframeAnimation } from "./keyframes";
 
 const PREVIEW_BRIDGE = String.raw`<script>
@@ -74,6 +76,160 @@ const PREVIEW_BRIDGE = String.raw`<script>
 })();
 </script>`;
 
+const ANIMATION_TRIGGER_SCRIPT = String.raw`<script>
+(function () {
+  var roots = document.querySelectorAll("[data-spark-anim-trigger]");
+  if (!roots.length) return;
+
+  function layersOf(root) {
+    var layers = [];
+    if (
+      root.classList.contains("spark-anim-layer") ||
+      root.classList.contains("spark-kf-layer")
+    ) {
+      layers.push(root);
+    }
+    var nested = root.querySelectorAll(".spark-anim-layer, .spark-kf-layer");
+    for (var index = 0; index < nested.length; index += 1) {
+      layers.push(nested[index]);
+    }
+    return layers;
+  }
+
+  function play(root) {
+    var layers = layersOf(root);
+    for (var index = 0; index < layers.length; index += 1) {
+      var style = layers[index].getAttribute("data-spark-anim-style");
+      if (!style) continue;
+      layers[index].style.animation = "none";
+      void layers[index].offsetWidth;
+      layers[index].style.animation = style + "animation-play-state:running;";
+    }
+  }
+
+  function readValue(element, trigger) {
+    if (!element) return "";
+    if (trigger.property === "text") {
+      return (element.textContent || "").trim();
+    }
+    if (trigger.property === "attribute") {
+      return element.getAttribute(trigger.attribute || "") || "";
+    }
+    var control = element.matches("input, textarea, select")
+      ? element
+      : element.querySelector("input, textarea, select");
+    if (control && typeof control.value === "string") {
+      return control.value;
+    }
+    var dataValue = element.getAttribute("data-spark-value");
+    if (dataValue !== null) return dataValue;
+    return (element.textContent || "").trim();
+  }
+
+  function compare(actual, operator, expected) {
+    var left = String(actual == null ? "" : actual).trim();
+    var right = String(expected == null ? "" : expected).trim();
+    var leftNumber = Number(left);
+    var rightNumber = Number(right);
+    var bothNumbers =
+      left !== "" &&
+      right !== "" &&
+      isFinite(leftNumber) &&
+      isFinite(rightNumber);
+    var a = bothNumbers ? leftNumber : left;
+    var b = bothNumbers ? rightNumber : right;
+    if (operator === "eq") return a === b;
+    if (operator === "lt") return a < b;
+    return a > b;
+  }
+
+  function moduleElements() {
+    var result = {};
+    var nodes = document.querySelectorAll("[data-spark-module-id]");
+    for (var index = 0; index < nodes.length; index += 1) {
+      result[nodes[index].getAttribute("data-spark-module-id")] = nodes[index];
+    }
+    return result;
+  }
+
+  function evaluateCondition(root, trigger) {
+    var source = trigger.moduleId
+      ? document.getElementById(trigger.moduleId)
+      : null;
+    if (!source) return false;
+    return compare(
+      readValue(source, trigger),
+      trigger.operator || "eq",
+      trigger.value || "",
+    );
+  }
+
+  function evaluateCustom(root, trigger, event) {
+    try {
+      var host =
+        root.closest("[data-spark-module-id]") ||
+        document.querySelector(".spark-page") ||
+        root;
+      var run = new Function(
+        "element",
+        "modules",
+        "event",
+        trigger.code || "return false;",
+      );
+      return Boolean(run.call(host, host, moduleElements(), event || null));
+    } catch (error) {
+      if (window.console) {
+        console.warn("Spark 动画触发条件执行失败", error);
+      }
+      return false;
+    }
+  }
+
+  function parseTrigger(root) {
+    try {
+      return JSON.parse(root.getAttribute("data-spark-anim-trigger") || "{}");
+    } catch (error) {
+      return null;
+    }
+  }
+
+  for (var index = 0; index < roots.length; index += 1) {
+    (function (root) {
+      var trigger = parseTrigger(root);
+      if (!trigger || !trigger.type || trigger.type === "auto") return;
+      if (trigger.type === "click") {
+        root.addEventListener("click", function () {
+          play(root);
+        });
+        return;
+      }
+      if (trigger.type === "hover") {
+        root.addEventListener("mouseenter", function () {
+          play(root);
+        });
+        return;
+      }
+      if (trigger.type !== "condition" && trigger.type !== "custom") return;
+      var active = false;
+      function check(event) {
+        var matched =
+          trigger.type === "condition"
+            ? evaluateCondition(root, trigger)
+            : evaluateCustom(root, trigger, event);
+        if (matched && !active) {
+          active = true;
+          play(root);
+        } else if (!matched) {
+          active = false;
+        }
+      }
+      check();
+      window.setInterval(check, 150);
+    })(roots[index]);
+  }
+})();
+</script>`;
+
 function inlineScript(code: string): string {
   return code.replace(/<\/script/gi, "<\\/script");
 }
@@ -92,9 +248,15 @@ export function renderPageHtml(
   const modules = page.modules
     .map((module, index) => {
       const definition = getModuleDefinitionSafe(module.type);
+      const paused = Boolean(
+        module.animationTrigger &&
+          (hasAnimations(module.animations) ||
+            hasKeyframes(module.keyframes)),
+      );
       const keyframe = buildKeyframeAnimation(
         module.keyframes,
         `module-${module.id}`,
+        { paused },
       );
       keyframeCss.push(keyframe.css);
       const content = keyframe.wrap(
@@ -103,15 +265,26 @@ export function renderPageHtml(
           preview: true,
         }),
       );
-      const animatedContent = wrapAnimatedHtml(content, module.animations);
+      const animatedContent = wrapAnimatedHtml(content, module.animations, {
+        paused,
+      });
+      const triggerContent =
+        paused && module.animationTrigger
+          ? `<div class="spark-anim-trigger-root" data-spark-anim-trigger="${htmlAttr(JSON.stringify(module.animationTrigger))}">${animatedContent}</div>`
+          : animatedContent;
       const rect = rectOf(module, page.width, page.height);
-      return `<div id="${htmlAttr(module.id)}" class="spark-module" data-spark-module-id="${htmlAttr(module.id)}" data-spark-module-type="${htmlAttr(module.type)}" style="position:absolute;left:${rect.x}px;top:${rect.y}px;width:${module.width}px;height:${module.height}px;z-index:${index + 1};">${animatedContent}</div>`;
+      return `<div id="${htmlAttr(module.id)}" class="spark-module" data-spark-module-id="${htmlAttr(module.id)}" data-spark-module-type="${htmlAttr(module.type)}" style="position:absolute;left:${rect.x}px;top:${rect.y}px;width:${module.width}px;height:${module.height}px;z-index:${index + 1};">${triggerContent}</div>`;
     })
     .join("\n");
 
+  const pagePaused = Boolean(
+    page.animationTrigger &&
+      (hasAnimations(page.animations) || hasKeyframes(page.keyframes)),
+  );
   const pageKeyframe = buildKeyframeAnimation(
     page.keyframes,
     `page-${page.id}`,
+    { paused: pagePaused },
   );
   keyframeCss.push(pageKeyframe.css);
   const customScript = page.customScript?.trim()
@@ -119,7 +292,18 @@ export function renderPageHtml(
     : "";
   const pageHtml = `<div class="spark-page">${modules}</div>`;
   const keyframePage = pageKeyframe.wrap(pageHtml);
-  const animatedPage = wrapAnimatedHtml(keyframePage, page.animations);
+  const animatedPage = wrapAnimatedHtml(keyframePage, page.animations, {
+    paused: pagePaused,
+  });
+  const triggerPage =
+    pagePaused && page.animationTrigger
+      ? `<div class="spark-anim-trigger-root" data-spark-anim-trigger="${htmlAttr(JSON.stringify(page.animationTrigger))}">${animatedPage}</div>`
+      : animatedPage;
+  const hasTriggers = Boolean(
+    page.animationTrigger ||
+      page.modules.some((module) => module.animationTrigger),
+  );
+  const triggerScript = hasTriggers ? ANIMATION_TRIGGER_SCRIPT : "";
   const previewBridge = options.preview ? PREVIEW_BRIDGE : "";
 
   return `<!doctype html>
@@ -162,7 +346,8 @@ export function renderPageHtml(
 </style>
 </head>
 <body>
-${animatedPage}
+${triggerPage}
+${triggerScript}
 ${customScript}
 ${previewBridge}
 </body>

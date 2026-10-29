@@ -1,8 +1,10 @@
 import { DEFAULT_THEME, createId } from "../model/defaults";
 import {
   DEFAULT_ANIMATION,
+  hasAnimationTrigger,
   hasAnimations,
   normalizeAnimation,
+  normalizeTrigger,
 } from "../model/animations";
 import {
   KEYFRAME_PROPERTIES,
@@ -13,6 +15,7 @@ import type {
   AnchorX,
   AnchorY,
   AnimationConfig,
+  AnimationTrigger,
   Keyframe,
   KeyframeAnimation,
   KeyframeProperty,
@@ -142,6 +145,24 @@ function parseAnimations(element: Element | undefined): AnimationConfig | undefi
   return hasAnimations(animations) ? animations : undefined;
 }
 
+function parseAnimationTrigger(
+  element: Element | undefined,
+): AnimationTrigger | undefined {
+  if (!element) {
+    return undefined;
+  }
+  const trigger = normalizeTrigger({
+    type: readAttr(element, "type") as AnimationTrigger["type"],
+    moduleId: readAttr(element, "module") ?? undefined,
+    property: readAttr(element, "property") as AnimationTrigger["property"],
+    attribute: readAttr(element, "attribute") ?? undefined,
+    operator: readAttr(element, "operator") as AnimationTrigger["operator"],
+    value: readAttr(element, "value") ?? undefined,
+    code: directChildren(element, "code")[0]?.textContent ?? undefined,
+  });
+  return hasAnimationTrigger(trigger) ? trigger : undefined;
+}
+
 function parseKeyframes(element: Element | undefined): KeyframeAnimation | undefined {
   if (!element) {
     return undefined;
@@ -193,6 +214,9 @@ function parseModule(element: Element, pageContext: string): ModuleNode {
 
   const animations = parseAnimations(directChildren(element, "animations")[0]);
   const keyframes = parseKeyframes(directChildren(element, "keyframes")[0]);
+  const animationTrigger = parseAnimationTrigger(
+    directChildren(element, "animation-trigger")[0],
+  );
   const anchorXRaw = readAttr(element, "anchor-x");
   const anchorYRaw = readAttr(element, "anchor-y");
   const anchorX: AnchorX = anchorXRaw === "right" ? "right" : "left";
@@ -210,6 +234,7 @@ function parseModule(element: Element, pageContext: string): ModuleNode {
     ...(anchorY === "bottom" ? { anchorY } : {}),
     ...(animations ? { animations } : {}),
     ...(keyframes ? { keyframes } : {}),
+    ...(animationTrigger ? { animationTrigger } : {}),
   };
 }
 
@@ -232,6 +257,9 @@ function parsePage(element: Element): Page {
 
   const animations = parseAnimations(directChildren(element, "animations")[0]);
   const keyframes = parseKeyframes(directChildren(element, "keyframes")[0]);
+  const animationTrigger = parseAnimationTrigger(
+    directChildren(element, "animation-trigger")[0],
+  );
   const customScriptElement = directChildren(element, "custom-script")[0];
   const customScript = customScriptElement?.textContent ?? "";
   const scriptLanguage =
@@ -251,6 +279,7 @@ function parsePage(element: Element): Page {
     ...(scriptLanguage ? { scriptLanguage } : {}),
     ...(animations ? { animations } : {}),
     ...(keyframes ? { keyframes } : {}),
+    ...(animationTrigger ? { animationTrigger } : {}),
   };
 }
 
@@ -376,6 +405,33 @@ function serializeAnimations(
   ];
 }
 
+function serializeAnimationTrigger(
+  trigger: AnimationTrigger | undefined,
+  level: number,
+): string[] {
+  if (!trigger || !hasAnimationTrigger(trigger)) {
+    return [];
+  }
+  const pad = indent(level);
+  const attrs =
+    attr("type", trigger.type) +
+    (trigger.type === "condition"
+      ? attr("module", trigger.moduleId ?? "") +
+        attr("property", trigger.property ?? "") +
+        attr("attribute", trigger.attribute ?? "") +
+        attr("operator", trigger.operator ?? "") +
+        attr("value", trigger.value ?? "")
+      : "");
+  if (trigger.type === "custom") {
+    return [
+      `${pad}<animation-trigger${attrs}>`,
+      `${pad}  <code>${wrapCdata(trigger.code ?? "")}</code>`,
+      `${pad}</animation-trigger>`,
+    ];
+  }
+  return [`${pad}<animation-trigger${attrs} />`];
+}
+
 function serializeKeyframes(
   config: KeyframeAnimation | undefined,
   level: number,
@@ -419,6 +475,7 @@ function serializeModule(module: ModuleNode, level: number): string[] {
   const childLines: string[] = [];
   childLines.push(...serializeKeyframes(module.keyframes, level + 1));
   childLines.push(...serializeAnimations(module.animations, level + 1));
+  childLines.push(...serializeAnimationTrigger(module.animationTrigger, level + 1));
   const entries = Object.entries(module.props);
   if (entries.length > 0) {
     childLines.push(`${pad}  <props>`);
@@ -443,6 +500,7 @@ function serializePage(page: Page, level: number): string[] {
   ];
   lines.push(...serializeKeyframes(page.keyframes, level + 1));
   lines.push(...serializeAnimations(page.animations, level + 1));
+  lines.push(...serializeAnimationTrigger(page.animationTrigger, level + 1));
   if (page.customScript) {
     lines.push(
       `${pad}  <custom-script${attr("language", page.scriptLanguage === "typescript" ? "typescript" : "javascript")}>${wrapCdata(page.customScript)}</custom-script>`,

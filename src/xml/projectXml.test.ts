@@ -22,6 +22,37 @@ describe("project XML", () => {
     expect(parsed.pages[0].modules[1].props.text).toBe("用 AI 构建网页");
   });
 
+  it("round-trips animation trigger conditions and custom code", () => {
+    const project = defaultProject();
+    const page = project.pages[0];
+    const source = page.modules[1];
+    page.modules[0].animationTrigger = {
+      type: "condition",
+      moduleId: source.id,
+      property: "value",
+      operator: "gt",
+      value: "10",
+    };
+    page.animationTrigger = {
+      type: "custom",
+      code: "return document.title.length > 0;",
+    };
+
+    const parsed = parseProjectXml(serializeProject(project));
+
+    expect(parsed.pages[0].modules[0].animationTrigger).toMatchObject({
+      type: "condition",
+      moduleId: source.id,
+      property: "value",
+      operator: "gt",
+      value: "10",
+    });
+    expect(parsed.pages[0].animationTrigger).toMatchObject({
+      type: "custom",
+      code: "return document.title.length > 0;",
+    });
+  });
+
   it("round-trips embedded image data URLs", () => {
     const project = defaultProject();
     const src = `data:image/png;base64,${"iVBORw0KGgo=".repeat(4000)}`;

@@ -9,6 +9,7 @@ import { htmlAttr } from "./escape";
 
 export const ANIMATION_CSS = `
 .spark-anim-layer { width: 100%; height: 100%; position: relative; }
+.spark-anim-trigger-root { width: 100%; height: 100%; position: relative; }
 @keyframes spark-entrance-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes spark-entrance-slide-up { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes spark-entrance-slide-down { from { opacity: 0; transform: translateY(-24px); } to { opacity: 1; transform: translateY(0); } }
@@ -64,25 +65,30 @@ export function animationStyle(
   return `animation:${name} ${config.duration}ms ${easing} ${delayFor(config, kind)}ms ${iteration} ${fill};`;
 }
 
+export interface WrapAnimationOptions {
+  paused?: boolean;
+}
+
 export function wrapAnimatedHtml(
   html: string,
   config?: AnimationConfig | null,
+  options: WrapAnimationOptions = {},
 ): string {
   if (!config || !hasAnimations(config)) {
     return html;
   }
+  const paused = Boolean(options.paused);
+  const styles = [
+    animationStyle(config, "exit"),
+    animationStyle(config, "loop"),
+    animationStyle(config, "entrance"),
+  ].filter(Boolean);
   let result = html;
-  const exitStyle = animationStyle(config, "exit");
-  if (exitStyle) {
-    result = `<div class="spark-anim-layer" style="${htmlAttr(exitStyle)}">${result}</div>`;
-  }
-  const loopStyle = animationStyle(config, "loop");
-  if (loopStyle) {
-    result = `<div class="spark-anim-layer" style="${htmlAttr(loopStyle)}">${result}</div>`;
-  }
-  const entranceStyle = animationStyle(config, "entrance");
-  if (entranceStyle) {
-    result = `<div class="spark-anim-layer" style="${htmlAttr(entranceStyle)}">${result}</div>`;
+  for (const style of styles) {
+    const attributes = paused
+      ? ` data-spark-anim-style="${htmlAttr(style)}" style="${htmlAttr(`${style}animation-play-state:paused;`)}"`
+      : ` style="${htmlAttr(style)}"`;
+    result = `<div class="spark-anim-layer"${attributes}>${result}</div>`;
   }
   return result;
 }

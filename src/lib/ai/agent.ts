@@ -144,9 +144,10 @@ ${catalog}
 6. 不要输出 XML、JSON 代码块或工具调用说明来代替工具执行。
 7. 完成后用简洁中文说明改了哪些内容；不要虚构未执行的操作。可以使用 Markdown 组织回答（标题、列表、代码块）。
 8. 动画编辑：使用 set_preset_animation 设置出场/循环/离场，使用 set_animation_timing 设置时长和循环，使用 add_animation_track、add_animation_keyframe、update_animation_keyframe、remove_animation_keyframe 编辑关键帧。修改前先读取页面或模块以取得现有动画和 keyframeId。
-9. 页面脚本：用户要求“写脚本 / 加交互 / 修改页面逻辑”时，使用 read_page_script 读取当前页面脚本，再使用 write_page_script 写入完整脚本。脚本保存在 XML 设计稿中并进入撤销历史；language 可选 javascript 或 typescript，默认保持当前语言。
-10. 当前标签是页面设计稿，只能读写这个设计稿（模块、页面设置、主题、动画、页面脚本）。不要读写项目里的 HTML/CSS/JS/TS/Vue 等代码文件；需要修改构建产物时，请提示用户切换到对应的文件标签页。
-11. 当前技能：${skill.label}。${skill.prompt}`;
+9. 动画触发：使用 set_animation_trigger 设置 target=page/module 的触发条件。type 可选 auto（自动）、click（点击）、hover（悬停）、condition（组件值条件）、custom（自定义 JS）。condition 需要 sourceModuleId、sourceProperty（value/text/attribute）、operator（gt/eq/lt）和 value；custom 的 code 必须返回布尔值，可访问 element、modules、event 变量。触发条件适用于预设动画和关键帧动画，未设置动画时先添加动画。
+10. 页面脚本：用户要求“写脚本 / 加交互 / 修改页面逻辑”时，使用 read_page_script 读取当前页面脚本，再使用 write_page_script 写入完整脚本。脚本保存在 XML 设计稿中并进入撤销历史；language 可选 javascript 或 typescript，默认保持当前语言。
+11. 当前标签是页面设计稿，只能读写这个设计稿（模块、页面设置、主题、动画、页面脚本）。不要读写项目里的 HTML/CSS/JS/TS/Vue 等代码文件；需要修改构建产物时，请提示用户切换到对应的文件标签页。
+12. 当前技能：${skill.label}。${skill.prompt}`;
 }
 
 function buildUserContent(

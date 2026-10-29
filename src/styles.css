@@ -5053,3 +5053,120 @@ body.is-resizing-sidebars * {
 .image-source-control .panel-hint {
   margin: 0;
 }
+
+/* Animation trigger editor */
+
+.animation-trigger-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(640px, 100%);
+  padding: 18px 22px 24px;
+  overflow-y: auto;
+}
+
+.animation-trigger-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.animation-trigger-head strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: var(--md-on-surface);
+}
+
+.animation-trigger-head small {
+  display: block;
+  margin-top: 3px;
+  color: var(--md-on-surface-variant);
+  font-size: 10px;
+}
+
+.trigger-warning {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  background: var(--md-error-container);
+  color: var(--md-on-error-container);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.trigger-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--md-on-surface-variant);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.trigger-field select,
+.trigger-field input,
+.trigger-field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 0 10px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  outline: 0;
+  background: var(--md-surface-highest);
+  color: var(--md-on-surface);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.trigger-field select,
+.trigger-field input {
+  height: 36px;
+}
+
+.trigger-field textarea {
+  padding: 9px 10px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.trigger-field select:focus,
+.trigger-field input:focus,
+.trigger-field textarea:focus {
+  border-color: var(--md-primary);
+}
+
+.trigger-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.animation-trigger-condition {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--radius-md);
+  background: var(--md-surface-container);
+}
+
+.animation-trigger-hint {
+  margin: 0;
+  color: var(--md-on-surface-variant);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.animation-trigger-hint code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--md-surface-highest);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+}

@@ -55,12 +55,13 @@ const PAGE_REQUIREMENTS = `页面与视觉要求：
 3. 如果 XML 中存在 <animations>，使用 CSS/JS 实现出场、循环和离场动画，并保留 duration、delay、exit-delay、easing。
 4. 如果 XML 中存在 <keyframes>，按轨道实现关键帧动画，保留 duration、loop、时间点、值和缓动；x/y 使用 translate，scale 使用 scale，rotate 使用 rotate，opacity 使用 opacity，blur/brightness/saturate 使用 filter。
 5. anchor-x="right" / anchor-y="bottom" 表示相对页面右/下边缘定位，布局时保持这种参照关系。
-6. 页面脚本必须完整保留并实际执行：不能省略、截断、改写成占位注释或只保留 TODO。
+6. 如果 XML 中存在 <animation-trigger>，动画必须在触发条件满足后才播放：click 绑定点击，hover 绑定 mouseenter，condition 监视指定组件值并按大于/等于/小于比较，custom 执行 code 并读取返回的布尔值；未触发前保持动画初始状态。条件值为 input/textarea/select 时读取控件 value。
+7. 页面脚本必须完整保留并实际执行：不能省略、截断、改写成占位注释或只保留 TODO。
    - HTML 项目：每个有脚本的页面写入 pages/<slug>/script.js，并在页面 HTML 中用 <script src="./script.js" defer></script> 引用；如果脚本语言是 TypeScript，需转写为行为等价的 JavaScript。
    - Vue 项目：完整写入对应页面的 <script setup lang="ts"> 或同目录 logic.ts，并在组件中实际执行。
-7. core.image 模块的 src 已经指向页面目录下的 ./assets/images/ 真实构建资源，必须原样使用该路径，不要替换成占位图、外链或 data URL，也不要删除图片。
-8. 除上述构建图片外，不要引用不存在的本地资源；其他图片可以使用占位图、CDN 或内联 SVG。
-9. 页面应当响应式、可访问、无控制台错误。`;
+8. core.image 模块的 src 已经指向页面目录下的 ./assets/images/ 真实构建资源，必须原样使用该路径，不要替换成占位图、外链或 data URL，也不要删除图片。
+9. 除上述构建图片外，不要引用不存在的本地资源；其他图片可以使用占位图、CDN 或内联 SVG。
+10. 页面应当响应式、可访问、无控制台错误。`;
 
 function projectLayoutRules(project: Project): string {
   if (project.type === "vue") {

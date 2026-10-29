@@ -9,6 +9,7 @@ import {
 import type {
   AnimationConfig,
   AnimationTab,
+  AnimationTrigger,
   KeyframeAnimation,
   KeyframeProperty,
   CodeLanguage,
@@ -26,7 +27,9 @@ import type {
 } from "../model/types";
 import {
   DEFAULT_ANIMATION,
+  hasAnimationTrigger,
   normalizeAnimation,
+  normalizeTrigger,
 } from "../model/animations";
 import {
   DEFAULT_KEYFRAME_ANIMATION,
@@ -192,6 +195,8 @@ export interface EditorState {
   ) => void;
   setModuleAnimations: (id: string, patch: Partial<AnimationConfig>) => void;
   setPageAnimations: (patch: Partial<AnimationConfig>) => void;
+  setModuleAnimationTrigger: (id: string, trigger: AnimationTrigger) => void;
+  setPageAnimationTrigger: (trigger: AnimationTrigger) => void;
   groupHistorySince: (baseLength: number) => void;
   setAnimationDockOpen: (open: boolean) => void;
   setAnimationTab: (tab: AnimationTab) => void;
@@ -1001,6 +1006,34 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         ...(page.animations ?? DEFAULT_ANIMATION),
         ...patch,
       });
+    });
+  },
+
+  setModuleAnimationTrigger(id, trigger) {
+    const normalized = normalizeTrigger(trigger);
+    get().commit((draft) => {
+      const page = activePageOf(draft, get().activePageId);
+      const module = page.modules.find((candidate) => candidate.id === id);
+      if (!module) {
+        return;
+      }
+      if (hasAnimationTrigger(normalized)) {
+        module.animationTrigger = normalized;
+      } else {
+        delete module.animationTrigger;
+      }
+    });
+  },
+
+  setPageAnimationTrigger(trigger) {
+    const normalized = normalizeTrigger(trigger);
+    get().commit((draft) => {
+      const page = activePageOf(draft, get().activePageId);
+      if (hasAnimationTrigger(normalized)) {
+        page.animationTrigger = normalized;
+      } else {
+        delete page.animationTrigger;
+      }
     });
   },
 
