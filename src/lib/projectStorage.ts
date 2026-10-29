@@ -37,6 +37,25 @@ const keyframeAnimationSchema = z.object({
   tracks: z.record(z.string(), z.array(keyframeSchema)).default({}),
 });
 
+const animationTriggerSchema = z.object({
+  type: z.enum(["auto", "click", "hover", "condition", "custom"]),
+  moduleId: z.string().optional(),
+  property: z.enum(["value", "text", "attribute"]).optional(),
+  attribute: z.string().optional(),
+  operator: z.enum(["gt", "eq", "lt"]).optional(),
+  value: z.string().optional(),
+  code: z.string().optional(),
+});
+
+const animationGroupSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().default("动画"),
+  enabled: z.boolean().default(true),
+  animations: animationSchema.optional(),
+  keyframes: keyframeAnimationSchema.optional(),
+  triggers: z.array(animationTriggerSchema).default([]),
+});
+
 const moduleSchema = z.object({
   id: z.string().min(1),
   type: z.string().min(1),
@@ -49,6 +68,8 @@ const moduleSchema = z.object({
   anchorY: z.enum(["top", "bottom"]).optional(),
   animations: animationSchema.optional(),
   keyframes: keyframeAnimationSchema.optional(),
+  animationTrigger: animationTriggerSchema.optional(),
+  animationGroups: z.array(animationGroupSchema).optional(),
 });
 
 const pageSchema = z.object({
@@ -63,6 +84,8 @@ const pageSchema = z.object({
   scriptLanguage: z.enum(["javascript", "typescript"]).optional(),
   animations: animationSchema.optional(),
   keyframes: keyframeAnimationSchema.optional(),
+  animationTrigger: animationTriggerSchema.optional(),
+  animationGroups: z.array(animationGroupSchema).optional(),
 });
 
 const themeSchema = z.object({
