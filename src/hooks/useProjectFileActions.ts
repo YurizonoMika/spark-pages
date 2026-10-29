@@ -7,10 +7,7 @@ import {
   confirmDiscardChanges,
   writeProjectFile,
 } from "../lib/projectFiles";
-import {
-  listProjectFiles,
-  writeBuildFiles,
-} from "../lib/ai/build";
+import { listProjectFiles } from "../lib/ai/build";
 import { parseProjectXml, serializeProject } from "../xml/projectXml";
 import { pageXmlPath } from "../lib/ai/projectContext";
 import { defaultProject } from "../model/defaults";
@@ -222,7 +219,10 @@ export function useProjectFileActions() {
         pages: [page],
       });
       const path = pageXmlPath(state.project, page);
-      await writeBuildFiles(folder, [{ path, content }]);
+      await invoke("write_text_file", {
+        path: joinPath(folder, path),
+        content,
+      });
       const store = useEditorStore.getState();
       store.bumpFilesVersion();
       toast(`页面已保存到 ${path}`, "success");

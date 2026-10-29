@@ -22,6 +22,27 @@ describe("project XML", () => {
     expect(parsed.pages[0].modules[1].props.text).toBe("用 AI 构建网页");
   });
 
+  it("round-trips embedded image data URLs", () => {
+    const project = defaultProject();
+    const src = `data:image/png;base64,${"iVBORw0KGgo=".repeat(4000)}`;
+    project.pages[0].modules.push({
+      id: "hero-image",
+      type: "core.image",
+      x: 0,
+      y: 0,
+      width: 320,
+      height: 200,
+      props: { src, alt: "hero", fit: "cover", radius: 12 },
+    });
+
+    const parsed = parseProjectXml(serializeProject(project));
+    const module = parsed.pages[0].modules.find(
+      (candidate) => candidate.id === "hero-image",
+    );
+
+    expect(module?.props.src).toBe(src);
+  });
+
   it("round-trips project settings", () => {
     const project = defaultProject();
     project.name = "营销官网";
