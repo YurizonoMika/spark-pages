@@ -69,7 +69,7 @@ function normalizeKeyframe(config: KeyframeAnimation): KeyframeAnimation {
  * animation panel and renderer can treat every animation the same way.
  */
 export function animationGroupsOf(host: AnimationHost): AnimationGroup[] {
-  if (host.animationGroups) {
+  if (host.animationGroups && host.animationGroups.length > 0) {
     return host.animationGroups.map((group) => ({
       ...group,
       triggers: group.triggers ?? [],
@@ -99,7 +99,7 @@ export function animationGroupsOf(host: AnimationHost): AnimationGroup[] {
 export function materializeAnimationGroups(
   host: AnimationHost,
 ): AnimationGroup[] {
-  if (host.animationGroups) {
+  if (host.animationGroups && host.animationGroups.length > 0) {
     return host.animationGroups;
   }
   host.animationGroups = animationGroupsOf(host);

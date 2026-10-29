@@ -51,6 +51,27 @@ describe("renderPageHtml", () => {
     expect(html).toContain("Spark 动画触发条件执行失败");
   });
 
+  it("falls back to legacy animation when the groups array is empty", () => {
+    const project = defaultProject();
+    const page = project.pages[0];
+    const module = page.modules[0];
+    module.keyframes = {
+      duration: 500,
+      loop: false,
+      tracks: {
+        opacity: [{ id: "kf1", time: 0, value: 1, easing: "linear" }],
+      },
+    };
+    module.animationTrigger = { type: "click" };
+    module.animationGroups = [];
+
+    const html = renderPageHtml(page, project);
+
+    expect(html).toContain("data-spark-anim-triggers=");
+    expect(html).toContain("spark-kf-");
+    expect(html).toContain("animation-play-state:paused");
+  });
+
   it("renders multiple independent animation groups", () => {
     const project = defaultProject();
     const page = project.pages[0];

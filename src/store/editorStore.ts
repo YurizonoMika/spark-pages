@@ -1227,6 +1227,11 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       host.animationGroups = groups.filter(
         (group) => group.id !== groupId,
       );
+      if (host.animationGroups.length === 0) {
+        delete host.animations;
+        delete host.keyframes;
+        delete host.animationTrigger;
+      }
     });
     if (get().animationGroupId === groupId) {
       set({ animationGroupId: null });
