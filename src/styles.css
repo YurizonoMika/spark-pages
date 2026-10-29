@@ -5602,6 +5602,19 @@ body.is-resizing-sidebars * {
   background: var(--md-primary);
 }
 
+.script-board-canvas.is-drop-target {
+  outline: 2px dashed var(--md-primary);
+  outline-offset: -8px;
+}
+
+.script-block-palette .palette-card {
+  cursor: grab;
+}
+
+.script-block-palette .palette-card:active {
+  cursor: grabbing;
+}
+
 .script-board-canvas.is-connecting .script-port.is-head {
   box-shadow: 0 0 0 4px var(--md-primary-container);
   animation: script-port-pulse 1.1s ease-in-out infinite;

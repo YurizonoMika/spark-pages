@@ -15,6 +15,10 @@ import {
 import type { ScriptBlockKind } from "../../model/types";
 import { SCRIPT_BLOCK_TEMPLATES } from "../../model/scriptBoard";
 import { useEditorStore } from "../../store/editorStore";
+import {
+  SCRIPT_BLOCK_DRAG_TYPE,
+  setDraggingScriptBlockKind,
+} from "../../lib/dnd";
 
 const ICONS: Record<ScriptBlockKind, typeof Play> = {
   natural: Sparkles,
@@ -46,7 +50,7 @@ export function ScriptBlockPalette() {
   return (
     <div className="palette script-block-palette">
       <p className="script-block-palette-hint">
-        点击积木添加到画板。点击积木尾部端点，再点击另一个积木头部端点即可连线。
+        点击或拖拽积木到画板。点击积木尾部端点，再点击另一个积木头部端点即可连线。
       </p>
       {Object.entries(groups).map(([category, templates]) => (
         <section
@@ -66,8 +70,18 @@ export function ScriptBlockPalette() {
                   key={template.kind}
                   type="button"
                   className="palette-card"
+                  draggable
+                  onDragStart={(event) => {
+                    setDraggingScriptBlockKind(template.kind);
+                    event.dataTransfer.setData(
+                      SCRIPT_BLOCK_DRAG_TYPE,
+                      template.kind,
+                    );
+                    event.dataTransfer.effectAllowed = "copy";
+                  }}
+                  onDragEnd={() => setDraggingScriptBlockKind(null)}
                   onClick={() => addScriptBlock(template.kind)}
-                  title={`${template.description}（点击添加）`}
+                  title={`${template.description}（点击或拖拽添加）`}
                 >
                   <span className="palette-icon">
                     <Icon size={18} />

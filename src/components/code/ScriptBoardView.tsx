@@ -1,18 +1,24 @@
 import {
   useRef,
   useState,
+  type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import {
   Link2,
   Loader2,
+  LocateFixed,
   Sparkles,
   Trash2,
   X,
 } from "lucide-react";
 import clsx from "clsx";
-import type { Page, ScriptBlock } from "../../model/types";
+import type {
+  Page,
+  ScriptBlock,
+  ScriptBlockKind,
+} from "../../model/types";
 import { scriptBlockTemplate } from "../../model/scriptBoard";
 import {
   selectActivePage,
@@ -24,6 +30,10 @@ import {
 } from "../../lib/ai/settings";
 import { generateScriptFromBoard } from "../../lib/ai/scriptBoard";
 import { toast } from "../../store/toastStore";
+import {
+  SCRIPT_BLOCK_DRAG_TYPE,
+  getDraggingScriptBlockKind,
+} from "../../lib/dnd";
 import { Modal } from "../ui/Modal";
 
 function edgePath(from: ScriptBlock, to: ScriptBlock): string {
@@ -47,6 +57,7 @@ export function ScriptBoardView({ page }: { page: Page }) {
   const updateScriptBlockTransient = useEditorStore(
     (state) => state.updateScriptBlockTransient,
   );
+  const addScriptBlock = useEditorStore((state) => state.addScriptBlock);
   const removeScriptBlock = useEditorStore(
     (state) => state.removeScriptBlock,
   );
@@ -78,6 +89,7 @@ export function ScriptBoardView({ page }: { page: Page }) {
   });
   const [origin, setOrigin] = useState({ x: 0, y: 0 });
   const [pendingFrom, setPendingFrom] = useState<string | null>(null);
+  const [dropActive, setDropActive] = useState(false);
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(
     null,
   );
@@ -156,6 +168,57 @@ export function ScriptBoardView({ page }: { page: Page }) {
   const cancelPending = () => {
     setPendingFrom(null);
     setPointer(null);
+  };
+
+  const handleDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDropActive(false);
+    const kind = (event.dataTransfer.getData(SCRIPT_BLOCK_DRAG_TYPE) ||
+      getDraggingScriptBlockKind()) as ScriptBlockKind | null;
+    if (!kind) {
+      return;
+    }
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+    addScriptBlock(
+      kind,
+      Math.max(0, Math.round(event.clientX - rect.left + origin.x - 130)),
+      Math.max(0, Math.round(event.clientY - rect.top + origin.y - 84)),
+    );
+  };
+
+  const locateNearestBlock = () => {
+    const element = scrollRef.current;
+    if (!element || board.blocks.length === 0) {
+      return;
+    }
+    const centerX = element.scrollLeft + element.clientWidth / 2 + origin.x;
+    const centerY = element.scrollTop + element.clientHeight / 2 + origin.y;
+    let nearest = board.blocks[0];
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const block of board.blocks) {
+      const dx = block.x + block.width / 2 - centerX;
+      const dy = block.y + block.height / 2 - centerY;
+      const distance = dx * dx + dy * dy;
+      if (distance < nearestDistance) {
+        nearest = block;
+        nearestDistance = distance;
+      }
+    }
+    element.scrollTo({
+      left: Math.max(
+        0,
+        nearest.x - origin.x + nearest.width / 2 - element.clientWidth / 2,
+      ),
+      top: Math.max(
+        0,
+        nearest.y - origin.y + nearest.height / 2 - element.clientHeight / 2,
+      ),
+      behavior: "smooth",
+    });
+    toast(`已定位到「${nearest.title}」`, "info");
   };
 
   const shiftCanvas = (dx: number, dy: number) => {
@@ -281,6 +344,16 @@ export function ScriptBoardView({ page }: { page: Page }) {
           </button>
           <button
             type="button"
+            className="btn btn-ghost"
+            onClick={locateNearestBlock}
+            disabled={board.blocks.length === 0}
+            title="定位到离当前查看位置最近的积木"
+          >
+            <LocateFixed size={13} />
+            定位
+          </button>
+          <button
+            type="button"
             className="btn btn-accent"
             onClick={openAi}
             disabled={board.blocks.length === 0 || generating}
@@ -306,9 +379,28 @@ export function ScriptBoardView({ page }: { page: Page }) {
           className={clsx(
             "script-board-canvas",
             pendingFrom && "is-connecting",
+            dropActive && "is-drop-target",
           )}
           style={{ width: canvasWidth, height: canvasHeight }}
           onClick={cancelPending}
+          onDragOver={(event) => {
+            if (
+              event.dataTransfer.types.includes(SCRIPT_BLOCK_DRAG_TYPE) ||
+              getDraggingScriptBlockKind()
+            ) {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+              setDropActive(true);
+            }
+          }}
+          onDragLeave={(event) => {
+            if (
+              !event.currentTarget.contains(event.relatedTarget as Node | null)
+            ) {
+              setDropActive(false);
+            }
+          }}
+          onDrop={handleDrop}
           onPointerMove={(event) => {
             if (!pendingFrom) {
               return;
