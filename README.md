@@ -122,6 +122,7 @@ return element.getAttribute("data-state") === "ready";
 - 画板是无限画板：向右/下滚动到边缘会自动扩展，向左/上继续滚动也会继续加载新区域
 - 积木标题可直接编辑
 - 画板工具栏的 **魔杖** 可以选中一个或多个积木；选中的积木会以附件形式附加到 Agent 对话（点击 **发给 AI** 打开对话），Agent 通过 `update_script_blocks` 只修改选中的积木
+- Agent 可以直接编辑画板：`add_script_blocks` 添加积木、`update_script_blocks` 修改字段或代码、`remove_script_blocks` 删除积木、`connect_script_blocks` 连接积木、`disconnect_script_blocks` 删除连接
 - 点击 **AI 生成代码**，AI 会把自然语言描述转换成真实代码，并根据积木内容和连接关系生成完整 JavaScript，直接写入当前页面的脚本（画板会保留）
 - 画板数据保存在页面的 `.spark` 文件中，随项目一起保存
 

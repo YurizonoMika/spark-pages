@@ -297,6 +297,73 @@ describe("agent runtime", () => {
     expect(updated?.code).toContain("打开菜单");
   });
 
+  it("adds, links and removes script blocks through board tools", () => {
+    const added = executeAgentTool("add_script_blocks", {
+      blocks: [
+        { kind: "start", title: "开始" },
+        { kind: "console", title: "输出", fields: { message: "loaded" } },
+      ],
+    });
+    expect(added).toMatchObject({ ok: true });
+    const ids = (added.result as { ids: string[] }).ids;
+    expect(ids).toHaveLength(2);
+
+    const created =
+      useEditorStore.getState().project.pages[0].scriptBoard?.blocks ?? [];
+    expect(created.map((block) => block.title)).toEqual(["开始", "输出"]);
+    expect(created[1].fields).toMatchObject({ message: "loaded" });
+    expect(created[1].code).toBe('console.log("loaded");');
+    expect(created[1].x).toBe(80);
+    expect(created[1].y).toBe(380);
+
+    const linked = executeAgentTool("connect_script_blocks", {
+      links: [{ from: ids[0], to: ids[1] }],
+    });
+    expect(linked).toMatchObject({ ok: true });
+    let board = useEditorStore.getState().project.pages[0].scriptBoard;
+    expect(board?.connections).toHaveLength(1);
+    const connectionId = board?.connections[0].id;
+
+    const disconnected = executeAgentTool("disconnect_script_blocks", {
+      ids: [connectionId],
+    });
+    expect(disconnected).toMatchObject({ ok: true });
+    board = useEditorStore.getState().project.pages[0].scriptBoard;
+    expect(board?.connections).toHaveLength(0);
+
+    executeAgentTool("connect_script_blocks", {
+      links: [{ from: ids[0], to: ids[1] }],
+    });
+    const removed = executeAgentTool("remove_script_blocks", {
+      ids: [ids[0]],
+    });
+    expect(removed).toMatchObject({ ok: true });
+    const after = useEditorStore.getState().project.pages[0].scriptBoard;
+    expect(after?.blocks).toHaveLength(1);
+    expect(after?.connections).toHaveLength(0);
+  });
+
+  it("restricts content edits to the wand selection", () => {
+    useEditorStore.getState().addScriptBlock("start", 0, 0);
+    useEditorStore.getState().addScriptBlock("console", 0, 300);
+    const blocks =
+      useEditorStore.getState().project.pages[0].scriptBoard?.blocks ?? [];
+    useEditorStore.getState().setScriptSelection([blocks[0].id]);
+
+    const blocked = executeAgentTool("update_script_blocks", {
+      blocks: [{ id: blocks[1].id, title: "改名" }],
+    });
+    expect(blocked).toMatchObject({ ok: false });
+    const removeBlocked = executeAgentTool("remove_script_blocks", {
+      ids: [blocks[1].id],
+    });
+    expect(removeBlocked).toMatchObject({ ok: false });
+    const removeSelected = executeAgentTool("remove_script_blocks", {
+      ids: [blocks[0].id],
+    });
+    expect(removeSelected).toMatchObject({ ok: true });
+  });
+
   it("returns tool errors to the model instead of throwing", async () => {
     const mocked = vi.mocked(chatCompletion);
     mocked.mockResolvedValueOnce({

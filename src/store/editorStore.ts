@@ -68,6 +68,15 @@ const HISTORY_LIMIT = 100;
 
 type ProjectRecipe = (draft: Project) => void;
 
+export interface NewScriptBlockInput {
+  kind: ScriptBlockKind;
+  x?: number;
+  y?: number;
+  title?: string;
+  code?: string;
+  fields?: Record<string, string>;
+}
+
 interface PagePatch {
   title?: string;
   width?: number;
@@ -312,6 +321,8 @@ export interface EditorState {
     x?: number,
     y?: number,
   ) => string;
+  addScriptBlocks: (inputs: NewScriptBlockInput[]) => string[];
+  removeScriptBlocks: (ids: string[]) => void;
   updateScriptBlock: (
     id: string,
     patch: Partial<
@@ -1545,6 +1556,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         activePageId: id,
         activeFilePath: null,
         selection: [],
+        scriptSelection: [],
         transactionBase: null,
         openDocuments: withOpenDocument(state.openDocuments, pageDocument(id)),
       };
@@ -1668,7 +1680,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     const block = createScriptBlock(
       kind,
       x ?? 80 + (index % 4) * 300,
-      y ?? 80 + Math.floor(index / 4) * 210,
+      y ?? 80 + Math.floor(index / 4) * 300,
     );
     get().commit((draft) => {
       const target = activePageOf(draft, state.activePageId);
@@ -1677,6 +1689,41 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       target.scriptBoard = board;
     });
     return block.id;
+  },
+
+  addScriptBlocks(inputs) {
+    const state = get();
+    const page = activePageOf(state.project, state.activePageId);
+    const existing = page.scriptBoard ?? emptyScriptBoard();
+    const offset = existing.blocks.length;
+    const blocks = inputs.map((input, index) => {
+      const column = offset + index;
+      const block = createScriptBlock(
+        input.kind,
+        input.x ?? 80 + (column % 4) * 300,
+        input.y ?? 80 + Math.floor(column / 4) * 300,
+      );
+      if (input.title !== undefined) {
+        block.title = input.title;
+      }
+      if (input.fields) {
+        block.fields = input.fields;
+        block.code = scriptBlockCode(input.kind, input.fields);
+      } else if (input.code !== undefined) {
+        block.code = input.code;
+        delete block.fields;
+      }
+      return block;
+    });
+    if (blocks.length > 0) {
+      get().commit((draft) => {
+        const target = activePageOf(draft, state.activePageId);
+        const board = target.scriptBoard ?? emptyScriptBoard();
+        board.blocks.push(...blocks);
+        target.scriptBoard = board;
+      });
+    }
+    return blocks.map((block) => block.id);
   },
 
   updateScriptBlock(id, patch) {
@@ -1737,21 +1784,30 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   },
 
   removeScriptBlock(id) {
+    get().removeScriptBlocks([id]);
+  },
+
+  removeScriptBlocks(ids) {
+    if (ids.length === 0) {
+      return;
+    }
+    const removed = new Set(ids);
     get().commit((draft) => {
       const page = activePageOf(draft, get().activePageId);
       if (!page.scriptBoard) {
         return;
       }
       page.scriptBoard.blocks = page.scriptBoard.blocks.filter(
-        (block) => block.id !== id,
+        (block) => !removed.has(block.id),
       );
       page.scriptBoard.connections = page.scriptBoard.connections.filter(
-        (connection) => connection.from !== id && connection.to !== id,
+        (connection) =>
+          !removed.has(connection.from) && !removed.has(connection.to),
       );
     });
     set((state) => ({
       scriptSelection: state.scriptSelection.filter(
-        (blockId) => blockId !== id,
+        (blockId) => !removed.has(blockId),
       ),
     }));
   },

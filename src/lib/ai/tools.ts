@@ -5,6 +5,7 @@ import type {
   ModuleNode,
   Page,
   PropValue,
+  ScriptBlockKind,
 } from "../../model/types";
 import { createId } from "../../model/defaults";
 import { animationGroupById } from "../../model/animationGroups";
@@ -27,6 +28,11 @@ import {
   getModuleDefinitionSafe,
   listModuleDefinitions,
 } from "../../modules/registry";
+import {
+  SCRIPT_BLOCK_TEMPLATES,
+  defaultScriptBlockFields,
+  scriptBlockFields,
+} from "../../model/scriptBoard";
 import { serializeProject } from "../../xml/projectXml";
 import {
   selectActivePage,
@@ -69,6 +75,10 @@ export const TOOL_LABELS: Record<string, string> = {
   write_page_script: "写入页面脚本",
   get_script_board: "读取脚本画板",
   update_script_blocks: "修改脚本积木",
+  add_script_blocks: "添加脚本积木",
+  remove_script_blocks: "删除脚本积木",
+  connect_script_blocks: "连接脚本积木",
+  disconnect_script_blocks: "断开脚本积木",
   read_current_file: "读取当前文件",
   write_current_file: "写入当前文件",
   set_preset_animation: "设置预设动画",
@@ -357,6 +367,111 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
           },
         },
         required: ["blocks"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "add_script_blocks",
+      description:
+        "向当前页面的脚本画板添加积木，返回新积木 ID。不传坐标时自动排列在现有积木右侧。可同时传 fields 或 code；有 fields 时会根据字段生成代码。",
+      parameters: {
+        type: "object",
+        properties: {
+          blocks: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                kind: {
+                  type: "string",
+                  enum: SCRIPT_BLOCK_TEMPLATES.map(
+                    (template) => template.kind,
+                  ),
+                  description: "积木类型",
+                },
+                title: { type: "string", description: "积木标题，可省略" },
+                fields: {
+                  type: "object",
+                  description: "可视化字段，可省略",
+                  additionalProperties: { type: "string" },
+                },
+                code: {
+                  type: "string",
+                  description: "完整代码，仅在没有 fields 时使用",
+                },
+                x: { type: "number", description: "画板横坐标，可省略" },
+                y: { type: "number", description: "画板纵坐标，可省略" },
+              },
+              required: ["kind"],
+            },
+          },
+        },
+        required: ["blocks"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "remove_script_blocks",
+      description:
+        "从脚本画板删除积木，并自动删除与它们相连的连接。存在魔杖选区时只能删除选中的积木。",
+      parameters: {
+        type: "object",
+        properties: {
+          ids: {
+            type: "array",
+            items: { type: "string" },
+            description: "要删除的积木 ID",
+          },
+        },
+        required: ["ids"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "connect_script_blocks",
+      description:
+        "用有向连接把积木串联起来：from 的尾部连接到 to 的头部。已存在的连接会跳过。",
+      parameters: {
+        type: "object",
+        properties: {
+          links: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                from: { type: "string", description: "起始积木 ID" },
+                to: { type: "string", description: "目标积木 ID" },
+              },
+              required: ["from", "to"],
+            },
+          },
+        },
+        required: ["links"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "disconnect_script_blocks",
+      description:
+        "删除脚本画板中的连接。连接 ID 可以从 get_script_board 的 connections 中获取。",
+      parameters: {
+        type: "object",
+        properties: {
+          ids: {
+            type: "array",
+            items: { type: "string" },
+            description: "要删除的连接 ID",
+          },
+        },
+        required: ["ids"],
       },
     },
   },
@@ -1080,8 +1195,11 @@ export function executeAgentTool(
             ...(block.fields ? { fields: block.fields } : {}),
             x: block.x,
             y: block.y,
+            width: block.width,
+            height: block.height,
           })),
           connections: board.connections,
+          selection: state.scriptSelection,
         },
       };
     }
@@ -1136,6 +1254,178 @@ export function executeAgentTool(
         ok: true,
         summary: `修改 ${updates.length} 个脚本积木`,
         result: { ids: updates.map((update) => update.id) },
+      };
+    }
+
+    if (name === "add_script_blocks") {
+      const raw = args.blocks;
+      if (!Array.isArray(raw) || raw.length === 0) {
+        throw new Error("blocks 必须是非空数组");
+      }
+      const board = page.scriptBoard ?? { blocks: [], connections: [] };
+      const kinds = new Set<string>(
+        SCRIPT_BLOCK_TEMPLATES.map((template) => template.kind),
+      );
+      const rightEdge = board.blocks.reduce(
+        (max, block) => Math.max(max, block.x + block.width),
+        0,
+      );
+      const baseX = board.blocks.length > 0 ? rightEdge + 80 : 80;
+      const inputs = raw.map((item, index) => {
+        const record = objectArg(item);
+        const kind = stringArg(record, "kind");
+        if (!kinds.has(kind)) {
+          throw new Error(
+            `不支持的积木类型: ${kind}，可选: ${[...kinds].join(", ")}`,
+          );
+        }
+        const blockKind = kind as ScriptBlockKind;
+        let fields: Record<string, string> | undefined;
+        if (record.fields !== undefined) {
+          const patch = objectArg(record.fields);
+          const definitions = scriptBlockFields(blockKind);
+          const allowed = new Set(definitions.map((field) => field.key));
+          fields = { ...defaultScriptBlockFields(blockKind) };
+          for (const [key, value] of Object.entries(patch)) {
+            if (!allowed.has(key)) {
+              throw new Error(
+                `积木 ${kind} 不支持字段 ${key}，可用字段: ${[...allowed].join(", ")}`,
+              );
+            }
+            if (typeof value !== "string") {
+              throw new Error(`字段 ${key} 必须是字符串`);
+            }
+            fields[key] = value;
+          }
+        }
+        const code = typeof record.code === "string" ? record.code : undefined;
+        const x = numberArg(record, "x");
+        const y = numberArg(record, "y");
+        return {
+          kind: blockKind,
+          ...(typeof record.title === "string" && record.title.trim()
+            ? { title: record.title }
+            : {}),
+          ...(fields ? { fields } : code !== undefined ? { code } : {}),
+          x: x === undefined ? baseX : Math.max(0, Math.round(x)),
+          y: y === undefined ? 80 + index * 300 : Math.max(0, Math.round(y)),
+        };
+      });
+      const ids = state.addScriptBlocks(inputs);
+      return {
+        ok: true,
+        summary: `添加 ${ids.length} 个脚本积木`,
+        result: { ids },
+      };
+    }
+
+    if (name === "remove_script_blocks") {
+      const raw = args.ids;
+      if (!Array.isArray(raw) || raw.length === 0) {
+        throw new Error("ids 必须是非空数组");
+      }
+      const ids = raw.map((item) => {
+        if (typeof item !== "string" || !item.trim()) {
+          throw new Error("积木 ID 必须是非空字符串");
+        }
+        return item;
+      });
+      const board = page.scriptBoard ?? { blocks: [], connections: [] };
+      const existing = new Set(board.blocks.map((block) => block.id));
+      const missing = ids.find((id) => !existing.has(id));
+      if (missing) {
+        throw new Error(`脚本积木不存在: ${missing}`);
+      }
+      const selection = new Set(state.scriptSelection);
+      if (selection.size > 0) {
+        const blocked = ids.find((id) => !selection.has(id));
+        if (blocked) {
+          throw new Error(`只能删除魔杖选中的积木: ${blocked}`);
+        }
+      }
+      state.removeScriptBlocks(ids);
+      return {
+        ok: true,
+        summary: `删除 ${new Set(ids).size} 个脚本积木`,
+        result: { ids: [...new Set(ids)] },
+      };
+    }
+
+    if (name === "connect_script_blocks") {
+      const raw = args.links;
+      if (!Array.isArray(raw) || raw.length === 0) {
+        throw new Error("links 必须是非空数组");
+      }
+      const board = page.scriptBoard ?? { blocks: [], connections: [] };
+      const existing = new Set(board.blocks.map((block) => block.id));
+      const links = raw.map((item) => {
+        const record = objectArg(item);
+        const from = stringArg(record, "from");
+        const to = stringArg(record, "to");
+        if (!existing.has(from)) {
+          throw new Error(`脚本积木不存在: ${from}`);
+        }
+        if (!existing.has(to)) {
+          throw new Error(`脚本积木不存在: ${to}`);
+        }
+        if (from === to) {
+          throw new Error(`不能把积木连接到自身: ${from}`);
+        }
+        return { from, to };
+      });
+      const created: Array<{ id?: string; from: string; to: string }> = [];
+      const skipped: Array<{ from: string; to: string }> = [];
+      for (const link of links) {
+        if (!state.connectScriptBlocks(link.from, link.to)) {
+          skipped.push(link);
+          continue;
+        }
+        const updatedPage = selectActivePage(useEditorStore.getState());
+        const connection = updatedPage.scriptBoard?.connections.find(
+          (candidate) =>
+            candidate.from === link.from && candidate.to === link.to,
+        );
+        created.push({ id: connection?.id, ...link });
+      }
+      if (created.length === 0) {
+        throw new Error("没有创建新连接：连接已存在或参数无效");
+      }
+      return {
+        ok: true,
+        summary: `新建 ${created.length} 条连接${
+          skipped.length > 0 ? `，跳过 ${skipped.length} 条` : ""
+        }`,
+        result: { created, skipped },
+      };
+    }
+
+    if (name === "disconnect_script_blocks") {
+      const raw = args.ids;
+      if (!Array.isArray(raw) || raw.length === 0) {
+        throw new Error("ids 必须是非空数组");
+      }
+      const ids = raw.map((item) => {
+        if (typeof item !== "string" || !item.trim()) {
+          throw new Error("连接 ID 必须是非空字符串");
+        }
+        return item;
+      });
+      const board = page.scriptBoard ?? { blocks: [], connections: [] };
+      const existing = new Set(
+        board.connections.map((connection) => connection.id),
+      );
+      const missing = ids.find((id) => !existing.has(id));
+      if (missing) {
+        throw new Error(`连接不存在: ${missing}`);
+      }
+      const unique = [...new Set(ids)];
+      for (const id of unique) {
+        state.removeScriptConnection(id);
+      }
+      return {
+        ok: true,
+        summary: `删除 ${unique.length} 条连接`,
+        result: { ids: unique },
       };
     }
 
