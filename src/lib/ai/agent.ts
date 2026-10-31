@@ -26,8 +26,6 @@ import {
   listModuleDefinitions,
 } from "../../modules/registry";
 
-const MAX_TOOL_ROUNDS = 12;
-
 export type AgentDocumentScope =
   | { kind: "page"; pageId: string }
   | {
@@ -268,7 +266,7 @@ export async function runAgentTurn(
     },
   ];
 
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+  for (let round = 0; ; round += 1) {
     if (options.isCancelled?.()) {
       return { content: "已停止本轮处理。", traces };
     }
@@ -301,8 +299,7 @@ export async function runAgentTurn(
     for (const call of toolCalls) {
       if (options.isCancelled?.()) {
         return { content: "已停止本轮处理。", traces };
-      }
-      const name = call.function.name;
+      }      const name = call.function.name;
       const label = TOOL_LABELS[name] ?? name;
       options.onStatus?.(`正在执行：${label}…`);
 
@@ -363,9 +360,4 @@ export async function runAgentTurn(
       });
     }
   }
-
-  return {
-    content: `已达到工具调用上限（${MAX_TOOL_ROUNDS} 轮）。${summarizeTraces(traces)}`,
-    traces,
-  };
 }

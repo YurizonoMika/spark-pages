@@ -158,6 +158,8 @@ return element.getAttribute("data-state") === "ready";
 - Agent 可通过 `create_animation_group` 新建多组动画，并用 `groupId` 指定组，再通过 `set_animation_trigger` 设置点击、悬停、组件值条件和自定义 JS 触发；动画组会随 XML 一起进入构建提示词
 - 预览魔杖支持多选：普通点击选中一个，按住 ⌘/Ctrl/Shift 点击可追加或取消；选区自动附加到下一次 Agent 消息
 - 工具修改合并为一次撤销；聊天记录按项目保存
+- 聊天 Agent 的工具调用不设轮数上限，可以连续完成多步任务，处理过程中可随时停止
+- 工具调用记录在任务进行时展开显示参数和结果，任务结束后自动收起，仍可手动展开查看
 - 兼容 OpenAI 兼容接口，模型需支持 Function Calling / Tools
 
 ### 项目类型

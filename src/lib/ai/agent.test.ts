@@ -388,6 +388,43 @@ describe("agent runtime", () => {
     expect(invalid).toMatchObject({ ok: false });
   });
 
+  it("continues past the old tool round limit", async () => {
+    const mocked = vi.mocked(chatCompletion);
+    let round = 0;
+    mocked.mockImplementation(async () => {
+      round += 1;
+      if (round <= 14) {
+        return {
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: `call_${round}`,
+                type: "function",
+                function: { name: "get_page", arguments: "{}" },
+              },
+            ],
+          },
+        } as never;
+      }
+      return {
+        message: { role: "assistant", content: "全部完成" },
+      } as never;
+    });
+
+    const result = await runAgentTurn({
+      config,
+      skillId: "general",
+      history: [],
+      userText: "一直读取页面直到完成",
+      selectedModuleIds: [],
+    });
+
+    expect(result.content).toBe("全部完成");
+    expect(result.traces).toHaveLength(14);
+  });
+
   it("returns tool errors to the model instead of throwing", async () => {
     const mocked = vi.mocked(chatCompletion);
     mocked.mockResolvedValueOnce({

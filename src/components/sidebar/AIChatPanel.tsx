@@ -39,7 +39,13 @@ const capabilities = [
   { icon: FileCode2, label: "读写页面代码" },
 ];
 
-function MessageBubble({ message }: { message: UiChatMessage }) {
+function MessageBubble({
+  message,
+  traceOpen = false,
+}: {
+  message: UiChatMessage;
+  traceOpen?: boolean;
+}) {
   if (message.role === "user") {
     return (
       <div className="ai-message ai-message-user">
@@ -77,7 +83,11 @@ function MessageBubble({ message }: { message: UiChatMessage }) {
         {message.traces && message.traces.length > 0 ? (
           <div className="ai-tool-traces">
             {message.traces.map((trace) => (
-              <ToolTrace key={`${trace.id}-${trace.name}`} trace={trace} />
+              <ToolTrace
+                key={`${trace.id}-${trace.name}`}
+                trace={trace}
+                autoOpen={traceOpen}
+              />
             ))}
           </div>
         ) : null}
@@ -314,7 +324,13 @@ export function AIChatPanel() {
           </>
         ) : (
           messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
+            <MessageBubble
+              key={message.id}
+              message={message}
+              traceOpen={
+                busy && message.id === messages[messages.length - 1]?.id
+              }
+            />
           ))
         )}
 

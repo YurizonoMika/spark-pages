@@ -1,8 +1,21 @@
+import { useEffect, useState } from "react";
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 import clsx from "clsx";
 import type { ChatToolTrace } from "../../store/aiChatStore";
 
-export function ToolTrace({ trace }: { trace: ChatToolTrace }) {
+export function ToolTrace({
+  trace,
+  autoOpen = false,
+}: {
+  trace: ChatToolTrace;
+  autoOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(autoOpen);
+
+  useEffect(() => {
+    setOpen(autoOpen);
+  }, [autoOpen]);
+
   const Icon =
     trace.status === "error"
       ? AlertCircle
@@ -10,7 +23,11 @@ export function ToolTrace({ trace }: { trace: ChatToolTrace }) {
         ? CheckCircle2
         : Loader2;
   return (
-    <details className={clsx("ai-tool-trace", `is-${trace.status}`)}>
+    <details
+      className={clsx("ai-tool-trace", `is-${trace.status}`)}
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
       <summary>
         <span className="ai-tool-status">
           <Icon
