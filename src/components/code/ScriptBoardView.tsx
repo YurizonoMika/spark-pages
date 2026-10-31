@@ -6,6 +6,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import {
+  Code2,
   Link2,
   Loader2,
   LocateFixed,
@@ -16,10 +17,12 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import type {
+  ModuleNode,
   Page,
   ScriptBlock,
   ScriptBlockKind,
 } from "../../model/types";
+import { getModuleDefinitionSafe } from "../../modules/registry";
 import {
   defaultScriptBlockFields,
   scriptBlockCode,
@@ -35,6 +38,7 @@ import {
   useAiSettingsStore,
 } from "../../lib/ai/settings";
 import { generateScriptFromBoard } from "../../lib/ai/scriptBoard";
+import { compileScriptBoard } from "../../lib/scriptCompiler";
 import { toast } from "../../store/toastStore";
 import {
   SCRIPT_BLOCK_DRAG_TYPE,
@@ -56,6 +60,17 @@ function pendingPath(from: ScriptBlock, x: number, y: number): string {
   const y1 = from.y + from.height;
   const middle = (y1 + y) / 2;
   return `M ${x1} ${y1} C ${x1} ${middle}, ${x} ${middle}, ${x} ${y}`;
+}
+
+function moduleLabel(module: ModuleNode): string {
+  const label = getModuleDefinitionSafe(module.type).label;
+  const text =
+    module.props.text ?? module.props.label ?? module.props.title ?? "";
+  const summary =
+    typeof text === "string" && text.trim()
+      ? text.trim().replace(/\s+/g, " ").slice(0, 14)
+      : module.id;
+  return `${label} · ${summary}`;
 }
 
 export function ScriptBoardView({ page }: { page: Page }) {
@@ -362,6 +377,24 @@ export function ScriptBoardView({ page }: { page: Page }) {
     setAiOpen(true);
   };
 
+  const compileBoard = () => {
+    try {
+      const code = compileScriptBoard(activePage);
+      if (!code.trim()) {
+        toast("画板中没有可以生成的脚本", "info");
+        return;
+      }
+      updatePageCode(activePage.id, { customScript: code });
+      setScriptView("code");
+      toast("已按积木连线生成页面脚本", "success");
+    } catch (error) {
+      toast(
+        error instanceof Error ? error.message : "生成页面脚本失败",
+        "error",
+      );
+    }
+  };
+
   const generate = async () => {
     setGenerating(true);
     setAiError(null);
@@ -454,6 +487,16 @@ export function ScriptBoardView({ page }: { page: Page }) {
           >
             <Sparkles size={13} />
             发给 AI
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={compileBoard}
+            disabled={board.blocks.length === 0}
+            title="不调用 AI，按积木连线直接拼装代码；自然语言积木请用 AI 生成"
+          >
+            <Code2 size={13} />
+            生成代码
           </button>
           <button
             type="button"
@@ -574,6 +617,10 @@ export function ScriptBoardView({ page }: { page: Page }) {
           {board.blocks.map((block) => {
             const template = scriptBlockTemplate(block.kind);
             const display = blockById.get(block.id) ?? block;
+            const boundModuleId = block.fields?.module;
+            const boundModule = boundModuleId
+              ? page.modules.find((module) => module.id === boundModuleId)
+              : undefined;
             return (
               <div
                 key={block.id}
@@ -652,6 +699,20 @@ export function ScriptBoardView({ page }: { page: Page }) {
                     <X size={11} />
                   </button>
                 </div>
+                {boundModule ? (
+                  <div
+                    className="script-block-binding"
+                    title={`已绑定页面组件：${boundModule.id}`}
+                  >
+                    <Link2 size={10} />
+                    <span>{moduleLabel(boundModule)}</span>
+                  </div>
+                ) : boundModuleId ? (
+                  <div className="script-block-binding is-missing">
+                    <Link2 size={10} />
+                    <span>组件已删除</span>
+                  </div>
+                ) : null}
                 {block.fields ? (
                   <div
                     className="script-block-fields"
@@ -663,7 +724,34 @@ export function ScriptBoardView({ page }: { page: Page }) {
                       return (
                         <label key={field.key} className="script-block-field">
                           <span>{field.label}</span>
-                          {field.kind === "select" ? (
+                          {field.kind === "module" ? (
+                            <select
+                              value={value}
+                              disabled={wandActive}
+                              onChange={(event) =>
+                                updateFields(
+                                  block,
+                                  field.key,
+                                  event.target.value,
+                                )
+                              }
+                            >
+                              <option value="">选择页面组件</option>
+                              {page.modules.map((module) => (
+                                <option key={module.id} value={module.id}>
+                                  {moduleLabel(module)}
+                                </option>
+                              ))}
+                              {value &&
+                              !page.modules.some(
+                                (module) => module.id === value,
+                              ) ? (
+                                <option value={value}>
+                                  {value}（组件已删除）
+                                </option>
+                              ) : null}
+                            </select>
+                          ) : field.kind === "select" ? (
                             <select
                               value={value}
                               disabled={wandActive}

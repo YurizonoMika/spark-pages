@@ -48,23 +48,24 @@ ${block.code}
   const moduleLines = page.modules
     .map(
       (module) =>
-        `- ${module.id}：${module.type}（可用 getElementById("${module.id}") 访问）`,
+        `- ${module.id}：${module.type}（可通过 document.querySelector('[data-spark-module-id="${module.id}"]') 访问）`,
     )
     .join("\n");
 
   return [
     {
       role: "system",
-      content: `你是资深前端 JavaScript 工程师。用户用思维导图积木画出了页面脚本草稿，请把它整理成可直接放入页面的完整 JavaScript。
+      content: `你是资深前端 JavaScript 工程师。用户用低代码积木画出了页面脚本草稿，请把它整理成可直接放入页面的完整 JavaScript。
 
 要求：
 1. 严格按照积木之间的连接关系组织代码流程；没有连接的积木可以按合理顺序整理。
 2. 带有“自然语言说明”的积木是用户对代码功能的需求描述，必须转换成真实可运行的代码，不能原样保留为注释。
-3. 保留每个代码积木中的代码意图、变量名和业务逻辑，不要省略或只写 TODO。
+3. 保留每个积木的代码意图、变量名、组件绑定关系和业务逻辑，不要省略或只写 TODO。
 4. 将同一流程中的积木合并为完整、可运行的代码；需要时使用 DOMContentLoaded 或 IIFE 等待 DOM。
-5. 页面模块可以通过 document.getElementById("模块 ID") 访问，下面列出了可用 ID。
-6. 只输出完整的 JavaScript 代码，不要 Markdown 代码围栏、解释文字或省略号。
-7. 代码必须能在浏览器中直接运行，不要引用不存在的资源。`,
+5. 页面组件通过 document.querySelector('[data-spark-module-id="模块 ID"]') 访问，下面列出了可用 ID。绑定类积木已经带有组件选择器，必须保留原组件 ID，不要猜测或改写。
+6. 读取输入、请求数据、改变量等积木写入的变量要贯穿后续的条件、遍历和绑定积木，保持变量名一致。
+7. 只输出完整的 JavaScript 代码，不要 Markdown 代码围栏、解释文字或省略号。
+8. 代码必须能在浏览器中直接运行，不要引用不存在的资源。`,
     },
     {
       role: "user",

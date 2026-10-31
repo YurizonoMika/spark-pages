@@ -300,7 +300,7 @@ describe("agent runtime", () => {
   it("adds, links and removes script blocks through board tools", () => {
     const added = executeAgentTool("add_script_blocks", {
       blocks: [
-        { kind: "start", title: "开始" },
+        { kind: "trigger_ready", title: "开始" },
         { kind: "console", title: "输出", fields: { message: "loaded" } },
       ],
     });
@@ -362,6 +362,30 @@ describe("agent runtime", () => {
       ids: [blocks[0].id],
     });
     expect(removeSelected).toMatchObject({ ok: true });
+  });
+
+  it("binds new blocks to real page modules", () => {
+    const moduleId =
+      useEditorStore.getState().project.pages[0].modules[0].id;
+    const added = executeAgentTool("add_script_blocks", {
+      blocks: [
+        {
+          kind: "bind_text",
+          fields: { module: moduleId, value: "{{count}}" },
+        },
+      ],
+    });
+    expect(added).toMatchObject({ ok: true });
+    const block =
+      useEditorStore.getState().project.pages[0].scriptBoard?.blocks[0];
+    expect(block?.fields?.module).toBe(moduleId);
+    expect(block?.code).toContain(moduleId);
+    expect(block?.code).toContain("String(count)");
+
+    const invalid = executeAgentTool("add_script_blocks", {
+      blocks: [{ kind: "bind_text", fields: { module: "missing" } }],
+    });
+    expect(invalid).toMatchObject({ ok: false });
   });
 
   it("returns tool errors to the model instead of throwing", async () => {

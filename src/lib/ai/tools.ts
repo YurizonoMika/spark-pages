@@ -386,9 +386,9 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
               properties: {
                 kind: {
                   type: "string",
-                  enum: SCRIPT_BLOCK_TEMPLATES.map(
-                    (template) => template.kind,
-                  ),
+                  enum: SCRIPT_BLOCK_TEMPLATES.filter(
+                    (template) => !template.hidden,
+                  ).map((template) => template.kind),
                   description: "积木类型",
                 },
                 title: { type: "string", description: "积木标题，可省略" },
@@ -1234,6 +1234,21 @@ export function executeAgentTool(
             }
             fields[key] = value;
           }
+          const kind = blocksById.get(id)?.kind;
+          if (kind) {
+            for (const field of scriptBlockFields(kind)) {
+              if (field.kind !== "module") {
+                continue;
+              }
+              const moduleId = fields[field.key]?.trim();
+              if (
+                moduleId &&
+                !page.modules.some((module) => module.id === moduleId)
+              ) {
+                throw new Error(`页面组件不存在: ${moduleId}`);
+              }
+            }
+          }
         }
         const code =
           typeof record.code === "string" ? record.code : undefined;
@@ -1264,7 +1279,9 @@ export function executeAgentTool(
       }
       const board = page.scriptBoard ?? { blocks: [], connections: [] };
       const kinds = new Set<string>(
-        SCRIPT_BLOCK_TEMPLATES.map((template) => template.kind),
+        SCRIPT_BLOCK_TEMPLATES.filter((template) => !template.hidden).map(
+          (template) => template.kind,
+        ),
       );
       const rightEdge = board.blocks.reduce(
         (max, block) => Math.max(max, block.x + block.width),
@@ -1296,6 +1313,18 @@ export function executeAgentTool(
               throw new Error(`字段 ${key} 必须是字符串`);
             }
             fields[key] = value;
+          }
+          for (const field of definitions) {
+            if (field.kind !== "module") {
+              continue;
+            }
+            const moduleId = fields[field.key]?.trim();
+            if (
+              moduleId &&
+              !page.modules.some((module) => module.id === moduleId)
+            ) {
+              throw new Error(`页面组件不存在: ${moduleId}`);
+            }
           }
         }
         const code = typeof record.code === "string" ? record.code : undefined;

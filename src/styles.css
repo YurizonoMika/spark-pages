@@ -5411,6 +5411,8 @@ body.is-resizing-sidebars * {
 .script-board-actions {
   flex: none;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 6px;
 }
@@ -5537,6 +5539,30 @@ body.is-resizing-sidebars * {
 
 .script-block-title:focus {
   background: var(--md-surface-highest);
+}
+
+.script-block-binding {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 3px 7px;
+  border-radius: 7px;
+  background: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.script-block-binding span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.script-block-binding.is-missing {
+  background: var(--md-error-container, #fce8e6);
+  color: var(--md-on-error-container, #8c1d18);
 }
 
 .script-block-delete {

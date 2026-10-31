@@ -45,17 +45,35 @@ export type ScriptView = "board" | "code";
 
 export type ScriptBlockKind =
   | "natural"
+  | "trigger_ready"
+  | "trigger_event"
+  | "trigger_timer"
+  | "state"
+  | "state_set"
+  | "input_to_state"
+  | "fetch_data"
+  | "bind_text"
+  | "bind_value"
+  | "bind_image"
+  | "bind_visibility"
+  | "bind_class"
+  | "bind_style"
+  | "bind_scroll"
+  | "bind_list"
+  | "condition"
+  | "loop"
+  | "delay"
+  | "navigate"
+  | "console"
+  | "comment"
+  | "custom"
   | "start"
   | "event"
   | "variable"
   | "if"
-  | "loop"
   | "function"
   | "fetch"
-  | "return"
-  | "console"
-  | "comment"
-  | "custom";
+  | "return";
 
 export interface ScriptBlock {
   id: string;
